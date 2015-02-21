@@ -1,13 +1,13 @@
 /*
 Bit 0 = fwdIn
-Bit 1 = backIn
-Bit 2 = fwdStopIn
-Bit 3 = backStopIn  
-Bit 4 = unassigned
-Bit 5 = unassigned
-Bit 6 = unassigned
-Bit 7 = unassigned
-*/
+ Bit 1 = backIn
+ Bit 2 = fwdStopIn
+ Bit 3 = backStopIn  
+ Bit 4 = unassigned
+ Bit 5 = unassigned
+ Bit 6 = unassigned
+ Bit 7 = unassigned
+ */
 int FWD_IN_OFFSET = 0;
 int BACK_IN_OFFSET = 1;
 int FWD_STOP_IN = 2;
@@ -16,9 +16,12 @@ int BACK_STOP_IN = 3;
 //4 inputs 
 int fwdIn = 16;      //B2 
 int backIn = 14;     //B3 
-int fwdStopIn = 7;   //E6
-int backStopIn = 2;   //D1
+int fwdStopIn = 4;   //D4
+int backStopIn = 10;   //B6
+
+//ERROR PIN
 int ERROR_PIN = 7;    //E6
+
 //2 outputs
 int fwdOut = 13;      //C7
 int backOut = 5;      //C6
@@ -33,7 +36,7 @@ void setup() {
   pinMode(backIn, INPUT);
   pinMode(fwdStopIn, INPUT);
   pinMode(backStopIn, INPUT);
-  
+
   pinMode(ERROR_PIN,OUTPUT);
   pinMode(fwdOut,OUTPUT);
   pinMode(backOut,OUTPUT);
@@ -42,10 +45,10 @@ void setup() {
 
 uint8_t checkInputs(){
   uint8_t tempState = 0x00;
-  tempState |= !digitalRead(fwdIn) << FWD_IN_OFFSET;
-  tempState |= !digitalRead(backIn) << BACK_IN_OFFSET;
-  tempState |= digitalRead(fwdStopIn) << FWD_STOP_IN;
-  tempState |= digitalRead(backStopIn) << BACK_STOP_IN;
+  tempState |= (!digitalRead(fwdIn)) << FWD_IN_OFFSET;
+  tempState |= (!digitalRead(backIn)) << BACK_IN_OFFSET;
+  tempState |= (!digitalRead(fwdStopIn)) << FWD_STOP_IN;
+  tempState |= (!digitalRead(backStopIn)) << BACK_STOP_IN;  
   return tempState;
 }
 
@@ -71,27 +74,30 @@ void loop() {
     digitalWrite(fwdOut,LOW);
     digitalWrite(backOut,LOW);
     break;
-    
+
   case 0x02: //MOVE BACKWARD SWITCH IS ON
     digitalWrite(fwdOut,LOW);
     digitalWrite(backOut,HIGH);
     break;
-    
+
   case 0x0A:  //MOVE BACKWARD, BUT BACK END IS ON
     digitalWrite(fwdOut,LOW);
     digitalWrite(backOut,LOW);
     break;
-  
+
   default: //LOL GG DONE MESSED UP SON
     while (1) {
       digitalWrite(fwdOut,LOW);
       digitalWrite(backOut,LOW);
       digitalWrite(ERROR_PIN,HIGH);
+      Serial.println("ERROR");
+      delay(5000);
     }
     break;
   } 
-  
+
 }
+
 
 
 
