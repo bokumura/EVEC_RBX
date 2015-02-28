@@ -3,9 +3,9 @@
  Bit 1 = backIn
  Bit 2 = fwdStopIn
  Bit 3 = backStopIn  
- Bit 4 = unassigned
- Bit 5 = unassigned
- Bit 6 = unassigned
+ Bit 4 = manualUp
+ Bit 5 = manualDown
+ Bit 6 = downEndStop
  Bit 7 = unassigned
  Bit 8 = unassigned
  Bit 9 = unassigned
