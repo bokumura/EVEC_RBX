@@ -6,7 +6,7 @@
  Bit 4 = manual up
  Bit 5 = manual down
  Bit 6 = down endstop
- Bit 7 = unassigned
+ Bit 7 = something
  Bit 8 = unassigned
  Bit 9 = unassigned
  Bit 10 = unassigned
@@ -16,19 +16,7 @@
  Bit 14 = unassigned
  Bit 15 = unassigned
  */
-<<<<<<< Updated upstream
 
-=======
- 
- /*
-  OUTPUTS:
-   1. moveFwd
-   2. movRev
-   3. liftUp
-   4. liftDown
- */
- 
->>>>>>> Stashed changes
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
@@ -43,10 +31,7 @@ const int backIn = 14;     //B3
 const int fwdStopIn = 4;   //D4
 const int backStopIn = 10; //B6
 
-<<<<<<< Updated upstream
 //3 inputs for lift
-=======
->>>>>>> Stashed changes
 const int manualUp = 6;     //D7  
 const int manualDown = 12;  //D6
 const int downStopIn = 3;   //D0
