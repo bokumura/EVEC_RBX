@@ -1,2 +1,2 @@
 # EVEC_RBX
-EVEC RBX LOL
+This is the EVEC_RBX repository. 
