@@ -1,38 +1,49 @@
 /*
-Bit 0 = fwdIn
+ Bit 0 = fwdIn
  Bit 1 = backIn
  Bit 2 = fwdStopIn
  Bit 3 = backStopIn  
- Bit 4 = upIn
- Bit 5 = downIn
- Bit 6 = downStopIn
+ Bit 4 = unassigned
+ Bit 5 = unassigned
+ Bit 6 = unassigned
  Bit 7 = unassigned
+ Bit 8 = unassigned
+ Bit 9 = unassigned
+ Bit 10 = unassigned
+ Bit 11 = unassigned
+ Bit 12 = unassigned
+ Bit 13 = unassigned
+ Bit 14 = unassigned
+ Bit 15 = unassigned
  */
-int FWD_IN_OFFSET = 0;
-int BACK_IN_OFFSET = 1;
-int FWD_STOP_IN = 2;
-int BACK_STOP_IN = 3;
-int UP_IN_OFFSET = 4;
-int DOWN_IN_OFFSET = 5;
-int DOWN_STOP_IN = 6;
+ 
+const int FWD_IN_OFFSET = 0;
+const int BACK_IN_OFFSET = 1;
+const int FWD_STOP_IN = 2;
+const int BACK_STOP_IN = 3;
+const int UP_IN_OFFSET = 4;
+const int DOWN_IN_OFFSET = 5;
+const int DOWN_STOP_IN = 6;
 
 //4 inputs 
-int fwdIn = 16;      //B2 
-int backIn = 14;     //B3 
-int fwdStopIn = 4;   //D4
-int backStopIn = 10; //B6
-int manualUp = 6     //D7  
-int manualDown = 12  //D6
-int downStopIn = 3   //D0
+const int fwdIn = 16;      //B2 
+const int backIn = 14;     //B3 
+const int fwdStopIn = 4;   //D4
+const int backStopIn = 10; //B6
+
+const int manualUp = 6     //D7  
+const int manualDown = 12  //D6
+const int downStopIn = 3   //D0
+
 //ERROR PIN
-int ERROR_PIN = 7;    //E6
+const int ERROR_PIN = 7;    //E6
 
 //2 outputs
-int fwdOut = 13;      //C7
-int backOut = 5;      //C6
+const int fwdOut = 13;      //C7
+const int backOut = 5;      //C6
 
-uint8_t prevState = 0x00;
-uint8_t currState = 0x00;
+uint16_t prevState = 0x00;
+uint16_t currState = 0x00;
 
 
 void setup() {
@@ -54,7 +65,7 @@ void setup() {
   digitalWrite(backOut, LOW);
 }
 
-uint8_t checkInputs(){
+uint16_t checkInputs(){
   uint8_t tempState = 0x00;
   tempState |= (!digitalRead(fwdIn)) << FWD_IN_OFFSET;
   tempState |= (!digitalRead(backIn)) << BACK_IN_OFFSET;
@@ -98,26 +109,22 @@ void loop() {
 }
 
   
-void movFwd()
-{
+void movFwd(){
   digitalWrite(backOut,LOW);
   digitalWrite(fwdOut,HIGH);
 }
 
-void stopCarts()
-{
+void stopCarts(){
   digitalWrite(fwdOut,LOW);
   digitalWrite(backOut,LOW);
 }
 
-void movRev()
-{
+void movRev(){
   digitalWrite(fwdOut,LOW);
   digitalWrite(backOut,HIGH); 
 }
 
-void error()
-{
+void error(){
       while (1) 
       {
         digitalWrite(fwdOut,LOW);
