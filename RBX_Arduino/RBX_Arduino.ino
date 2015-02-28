@@ -16,7 +16,14 @@
  Bit 14 = unassigned
  Bit 15 = unassigned
  */
-
+ 
+/*
+OUTPUTS:
+   1. moveFwd
+   2. movRev
+   3. liftUp
+   4. liftDown
+ */
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
