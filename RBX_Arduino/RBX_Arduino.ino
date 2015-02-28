@@ -3,10 +3,10 @@
  Bit 1 = backIn
  Bit 2 = fwdStopIn
  Bit 3 = backStopIn  
- Bit 4 = manualUp
- Bit 5 = manualDown
- Bit 6 = downEndStop
- Bit 7 = unassigned
+ Bit 4 = manual up
+ Bit 5 = manual down
+ Bit 6 = down endstop
+ Bit 7 = something
  Bit 8 = unassigned
  Bit 9 = unassigned
  Bit 10 = unassigned
@@ -52,6 +52,7 @@ void setup() {
   pinMode(backIn, INPUT);
   pinMode(fwdStopIn, INPUT);
   pinMode(backStopIn, INPUT);
+  
   digitalWrite(fwdIn, HIGH);
   digitalWrite(backIn, HIGH);
   digitalWrite(fwdStopIn, HIGH);
@@ -134,5 +135,3 @@ void error(){
         delay(5000);
       }
 }
-
-
