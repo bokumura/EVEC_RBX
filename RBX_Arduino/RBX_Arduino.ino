@@ -16,7 +16,7 @@
  Bit 14 = unassigned
  Bit 15 = unassigned
  */
- 
+
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
@@ -25,15 +25,16 @@ const int UP_IN_OFFSET = 4;
 const int DOWN_IN_OFFSET = 5;
 const int DOWN_STOP_IN = 6;
 
-//4 inputs 
+//4 inputs for ramp
 const int fwdIn = 16;      //B2 
 const int backIn = 14;     //B3 
 const int fwdStopIn = 4;   //D4
 const int backStopIn = 10; //B6
 
-const int manualUp = 6     //D7  
-const int manualDown = 12  //D6
-const int downStopIn = 3   //D0
+//3 inputs for lift
+const int manualUp = 6;     //D7  
+const int manualDown = 12;  //D6
+const int downStopIn = 3;   //D0
 
 //ERROR PIN
 const int ERROR_PIN = 7;    //E6
@@ -48,19 +49,21 @@ uint16_t currState = 0x00;
 
 void setup() {
   Serial.begin(9600);
+
   pinMode(fwdIn, INPUT);
   pinMode(backIn, INPUT);
   pinMode(fwdStopIn, INPUT);
   pinMode(backStopIn, INPUT);
-  
+
+  pinMode(ERROR_PIN,OUTPUT);
+  pinMode(fwdOut,OUTPUT);
+  pinMode(backOut,OUTPUT);
+
   digitalWrite(fwdIn, HIGH);
   digitalWrite(backIn, HIGH);
   digitalWrite(fwdStopIn, HIGH);
   digitalWrite(backStopIn, HIGH);
 
-  pinMode(ERROR_PIN,OUTPUT);
-  pinMode(fwdOut,OUTPUT);
-  pinMode(backOut,OUTPUT);
   digitalWrite(ERROR_PIN,LOW);
   digitalWrite(fwdOut, LOW);
   digitalWrite(backOut, LOW);
@@ -103,13 +106,13 @@ void loop() {
     break;
 
   default: //LOL GG DONE MESSED UP SON
-      error();
+    error();
     break;
   } 
- 
+
 }
 
-  
+
 void movFwd(){
   digitalWrite(backOut,LOW);
   digitalWrite(fwdOut,HIGH);
@@ -126,12 +129,11 @@ void movRev(){
 }
 
 void error(){
-      while (1) 
-      {
-        digitalWrite(fwdOut,LOW);
-        digitalWrite(backOut,LOW);
-        digitalWrite(ERROR_PIN,HIGH);
-        Serial.println("ERROR");
-        delay(5000);
-      }
+  while (1){
+    digitalWrite(fwdOut,LOW);
+    digitalWrite(backOut,LOW);
+    digitalWrite(ERROR_PIN,HIGH);
+    Serial.println("ERROR");
+    delay(5000);
+  }
 }
