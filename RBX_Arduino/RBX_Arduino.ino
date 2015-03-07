@@ -65,29 +65,19 @@ void setup() {
   pinMode(backIn, INPUT);
   pinMode(fwdStopIn, INPUT);
   pinMode(backStopIn, INPUT);
-  pinMode(manualUp, INPUT);
-  pinMode(manualDown, INPUT);
-  pinMode(downStopIn, INPUT);
 
-  pinMode(ERROR_PIN, OUTPUT);
-  pinMode(fwdOut, OUTPUT);
-  pinMode(backOut, OUTPUT);
-  pinMode(upOut, OUTPUT);
-  pinMode(downOut, OUTPUT);
+  pinMode(ERROR_PIN,OUTPUT);
+  pinMode(fwdOut,OUTPUT);
+  pinMode(backOut,OUTPUT);
 
   digitalWrite(fwdIn, HIGH);
   digitalWrite(backIn, HIGH);
   digitalWrite(fwdStopIn, HIGH);
   digitalWrite(backStopIn, HIGH);
-  digitalWrite(manualUp, HIGH);
-  digitalWrite(manualDown, HIGH);
-  digitalWrite(downStopIn, HIGH);
 
-  digitalWrite(ERROR_PIN, LOW);
+  digitalWrite(ERROR_PIN,LOW);
   digitalWrite(fwdOut, LOW);
   digitalWrite(backOut, LOW);
-  digitalWrite(upOut, LOW);
-  digitalWrite(downOut, LOW);
 }
 
 uint16_t checkInputs(){
@@ -95,10 +85,7 @@ uint16_t checkInputs(){
   tempState |= (!digitalRead(fwdIn)) << FWD_IN_OFFSET;
   tempState |= (!digitalRead(backIn)) << BACK_IN_OFFSET;
   tempState |= (!digitalRead(fwdStopIn)) << FWD_STOP_IN;
-  tempState |= (!digitalRead(backStopIn)) << BACK_STOP_IN;
-  tempState |= (!digitalRead(manualUp)) << UP_IN_OFFSET;
-  tempState |= (!digitalRead(manualDown)) << DOWN_IN_OFFSET;
-  tempState |= (!digitalRead(downStopIn)) << DOWN_STOP_IN;
+  tempState |= (!digitalRead(backStopIn)) << BACK_STOP_IN;  
   return tempState;
 }
 
