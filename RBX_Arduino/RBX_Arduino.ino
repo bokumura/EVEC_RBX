@@ -6,7 +6,7 @@
  Bit 4 = manual up
  Bit 5 = manual down
  Bit 6 = down endstop
- Bit 7 = unassigned
+ Bit 7 = something
  Bit 8 = unassigned
  Bit 9 = unassigned
  Bit 10 = unassigned
@@ -69,9 +69,9 @@ void setup() {
   pinMode(manualDown, INPUT);
   pinMode(downStopIn, INPUT);
 
-  pinMode(ERROR_PIN, OUTPUT);
-  pinMode(fwdOut, OUTPUT);
-  pinMode(backOut, OUTPUT);
+  pinMode(ERROR_PIN,OUTPUT);
+  pinMode(fwdOut,OUTPUT);
+  pinMode(backOut,OUTPUT);
   pinMode(upOut, OUTPUT);
   pinMode(downOut, OUTPUT);
 
@@ -83,7 +83,7 @@ void setup() {
   digitalWrite(manualDown, HIGH);
   digitalWrite(downStopIn, HIGH);
 
-  digitalWrite(ERROR_PIN, LOW);
+  digitalWrite(ERROR_PIN,LOW);
   digitalWrite(fwdOut, LOW);
   digitalWrite(backOut, LOW);
   digitalWrite(upOut, LOW);
@@ -111,9 +111,17 @@ void loop() {
 
   switch (currState) {
   case 0x00:
+    stopCarts();
+    break;
+
+  case 0x40: //LIFT IS DOWN, NOT MOVING
+  case 0x44: //FWD END ON, DOWN ON, NOT MOVING
+  case 0x48: //BACK END ON, DOWN ON, NOT MOVING
+    stopCarts();
     break;
 
   case 0x41: //MOVE FWD SWITCH IS ON
+  case 0x49: //MOVE FWD, BACK END IS ON
     movFwd();
     break;
 
@@ -122,6 +130,7 @@ void loop() {
     break;
 
   case 0x42: //MOVE BACKWARD SWITCH IS ON
+  case 0x46: //MOVE BACKWARD, FWD END IS ON
     movRev();
     break;
 
@@ -159,18 +168,18 @@ void loop() {
 
 
 void movFwd(){
-  digitalWrite(backOut, LOW);
-  digitalWrite(fwdOut, HIGH);
+  digitalWrite(backOut,LOW);
+  digitalWrite(fwdOut,HIGH);
 }
 
 void stopCarts(){
-  digitalWrite(fwdOut, LOW);
-  digitalWrite(backOut, LOW);
+  digitalWrite(fwdOut,LOW);
+  digitalWrite(backOut,LOW);
 }
 
 void movRev(){
-  digitalWrite(fwdOut, LOW);
-  digitalWrite(backOut, HIGH); 
+  digitalWrite(fwdOut,LOW);
+  digitalWrite(backOut,HIGH); 
 }
 
 void movUp(){
@@ -190,11 +199,11 @@ void movDown(){
 
 void error(){
   while (1){
-    digitalWrite(fwdOut, LOW);
-    digitalWrite(backOut, LOW);
+    digitalWrite(fwdOut,LOW);
+    digitalWrite(backOut,LOW);
     digitalWrite(upOut, LOW);
     digitalWrite(downOut, LOW);
-    digitalWrite(ERROR_PIN, HIGH);
+    digitalWrite(ERROR_PIN,HIGH);
     Serial.println("ERROR");
     delay(5000);
   }
