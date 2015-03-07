@@ -51,8 +51,8 @@ const int fwdOut = 13;      //C7
 const int backOut = 5;      //C6
 
 //2 outputs for lift
-const int upOut = 6;     //D7
-const int downOut = 12;  //D6
+const int upOut = 6     //D7
+const int downOut = 12  //D6
 
 uint16_t prevState = 0x00;
 uint16_t currState = 0x00;
@@ -155,6 +155,7 @@ void loop() {
     error();
     break;
   } 
+
 }
 
 
@@ -183,7 +184,7 @@ void stopLift(){
   digitalWrite(upOut, LOW);
 }
 
-void movDown(){
+vid movDown(){
   digitalWrite(upOut, LOW);
   digitalWrite(downOut, HIGH);
 }
