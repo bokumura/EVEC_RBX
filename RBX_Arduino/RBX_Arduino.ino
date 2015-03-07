@@ -94,9 +94,16 @@ void loop() {
 
   switch (currState) {
   case 0x00:
+    stopCarts();
+    break;
+
+  case 0x04: //FWD END ON, NOT MOVING
+  case 0x08: //BACK END IS ON, NOT MOVING
+    stopCarts();
     break;
 
   case 0x01: //MOVE FWD SWITCH IS ON
+  case 0x09: //MOVE FWD, BACK END IS ON
     movFwd();
     break;
 
@@ -105,6 +112,7 @@ void loop() {
     break;
 
   case 0x02: //MOVE BACKWARD SWITCH IS ON
+  case 0x06: //MOVE BACKWARD, FWD END IS ON
     movRev();
     break;
 
