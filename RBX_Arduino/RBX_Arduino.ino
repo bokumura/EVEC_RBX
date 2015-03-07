@@ -118,6 +118,7 @@ void loop() {
   case 0x44: //FWD END ON, DOWN ON, NOT MOVING
   case 0x48: //BACK END ON, DOWN ON, NOT MOVING
     stopCarts();
+    stopLift();
     break;
 
   case 0x41: //MOVE FWD SWITCH IS ON
