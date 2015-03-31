@@ -35,30 +35,25 @@ const int DOWN_IN_OFFSET = 5;
 const int DOWN_STOP_IN = 6;
 
 //4 inputs for ramp
-const int fwdIn = 16;      //B2 manCartFwd
-const int backIn = 14;     //B3 manCartBack
-const int fwdStopIn = 4;   //D4 cartAtFront
-const int backStopIn = 10; //B6  cartAtBack
+const int manCartFwd = 16;   //B2
+const int manCartBack = 14;  //B3 
+const int cartAtFront = 4;   //D4
+const int cartAtBack = 10;   //B6  
 
 //3 inputs for lift
-//const int manualUp = 6;     //D7  manLiftUp
-const int manualUp = 15;     //B1  manLiftUp
-//const int manualDown = 12;  //D6  manLiftDown
-const int manualDown = 17;  //B0  manLiftDown
-//const int downStopIn = 3;   //D0  liftAtBottom
-const int downStopIn = 9;   //B5  liftAtBottom
+const int manLiftUp = 15;    //B1
+const int manLiftDown = 17;  //B0
+const int liftAtBottom = 9;  //B5  
 
 //ERROR PIN
 const int ERROR_PIN = 7;    //E6
  
 
 //4 outputs
-const int fwdOut = 13;      //C7  moveCartFwd
-const int backOut = 5;      //C6  moveCartBack
-//const int upOut = 15;       //B1  moveLiftUp
-const int upOut = 6;       //D7  moveLiftUp
-//const int downOut = 17;     //B0  moveLiftDown
-const int downOut = 12;     //D6  moveLiftDown
+const int moveCartFwd = 13;   //C7
+const int moveCartBack = 5;   //C6
+const int moveLiftUp = 6;     //D7
+const int moveLiftDown = 12;  //D6
 
 /* Variables to hold the current and previous states */
 uint16_t prevState = 0x0000;
@@ -69,39 +64,39 @@ void setup() {
   Serial.begin(9600);
  
 // Set ramp signals as inputs
-  pinMode(fwdIn, INPUT);
-  pinMode(backIn, INPUT);
-  pinMode(fwdStopIn, INPUT);
-  pinMode(backStopIn, INPUT);
+  pinMode(manCartFwd, INPUT);
+  pinMode(manCartBack, INPUT);
+  pinMode(cartAtFront, INPUT);
+  pinMode(cartAtBack, INPUT);
   
 // Set lift signals as inputs
-  pinMode(manualUp, INPUT);
-  pinMode(manualDown, INPUT);
-  pinMode(downStopIn, INPUT);
+  pinMode(manLiftUp, INPUT);
+  pinMode(manLiftDown, INPUT);
+  pinMode(liftAtBottom, INPUT);
 
 // Set output pins:
   pinMode(ERROR_PIN,OUTPUT);
-  pinMode(fwdOut,OUTPUT);
-  pinMode(backOut,OUTPUT);
-  pinMode(upOut, OUTPUT);
-  pinMode(downOut, OUTPUT);
+  pinMode(moveCartFwd,OUTPUT);
+  pinMode(moveCartBack,OUTPUT);
+  pinMode(moveLiftUp, OUTPUT);
+  pinMode(moveLiftDown, OUTPUT);
 
 // Set the inputs as high (since active low)
-  digitalWrite(fwdIn, HIGH);
-  digitalWrite(backIn, HIGH);
-  digitalWrite(fwdStopIn, HIGH);
-  digitalWrite(backStopIn, HIGH);
+  digitalWrite(manCartFwd, HIGH);
+  digitalWrite(manCartBack, HIGH);
+  digitalWrite(cartAtFront, HIGH);
+  digitalWrite(cartAtBack, HIGH);
   
-  digitalWrite(manualUp, HIGH);
-  digitalWrite(manualDown, HIGH);
-  digitalWrite(downStopIn, HIGH);
+  digitalWrite(manLiftUp, HIGH);
+  digitalWrite(manLiftDown, HIGH);
+  digitalWrite(liftAtBottom, HIGH);
 
 // Set outputs as low initially
   digitalWrite(ERROR_PIN,LOW);
-  digitalWrite(fwdOut, LOW);
-  digitalWrite(backOut, LOW);
-  digitalWrite(upOut, LOW);
-  digitalWrite(downOut, LOW);
+  digitalWrite(moveCartFwd, LOW);
+  digitalWrite(moveCartBack, LOW);
+  digitalWrite(moveLiftUp, LOW);
+  digitalWrite(moveLiftDown, LOW);
 }
 
 /* This function takes all of the inputs and adds it into 
@@ -109,13 +104,13 @@ void setup() {
    active low. */
 uint16_t checkInputs(){
   uint8_t tempState = 0x00;
-  tempState |= (!digitalRead(fwdIn)) << FWD_IN_OFFSET;
-  tempState |= (!digitalRead(backIn)) << BACK_IN_OFFSET;
-  tempState |= (!digitalRead(fwdStopIn)) << FWD_STOP_IN;
-  tempState |= (!digitalRead(backStopIn)) << BACK_STOP_IN;  
-  tempState |= (!digitalRead(manualUp)) << UP_IN_OFFSET;
-  tempState |= (!digitalRead(manualDown)) << DOWN_IN_OFFSET;
-  tempState |= (!digitalRead(downStopIn)) << DOWN_STOP_IN;
+  tempState |= (!digitalRead(manCartFwd)) << FWD_IN_OFFSET;
+  tempState |= (!digitalRead(manCartBack)) << BACK_IN_OFFSET;
+  tempState |= (!digitalRead(cartAtFront)) << FWD_STOP_IN;
+  tempState |= (!digitalRead(cartAtBack)) << BACK_STOP_IN;  
+  tempState |= (!digitalRead(manLiftUp)) << UP_IN_OFFSET;
+  tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
+  tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
   return tempState;
 }
 
@@ -186,41 +181,41 @@ void loop() {
 
 
 void movFwd(){
-  digitalWrite(backOut,LOW);
-  digitalWrite(fwdOut,HIGH);
+  digitalWrite(moveCartBack,LOW);
+  digitalWrite(moveCartFwd,HIGH);
 }
 
 void stopCarts(){
-  digitalWrite(fwdOut,LOW);
-  digitalWrite(backOut,LOW);
+  digitalWrite(moveCartFwd,LOW);
+  digitalWrite(moveCartBack,LOW);
 }
 
 void movRev(){
-  digitalWrite(fwdOut,LOW);
-  digitalWrite(backOut,HIGH); 
+  digitalWrite(moveCartFwd,LOW);
+  digitalWrite(moveCartBack,HIGH); 
 }
 
 void movUp(){
-  digitalWrite(downOut, LOW);
-  digitalWrite(upOut, HIGH);
+  digitalWrite(moveLiftDown, LOW);
+  digitalWrite(moveLiftUp, HIGH);
 }
 
 void stopLift(){
-  digitalWrite(downOut, LOW);
-  digitalWrite(upOut, LOW);
+  digitalWrite(moveLiftDown, LOW);
+  digitalWrite(moveLiftUp, LOW);
 }
 
 void movDown(){
-  digitalWrite(upOut, LOW);
-  digitalWrite(downOut, HIGH);
+  digitalWrite(moveLiftUp, LOW);
+  digitalWrite(moveLiftDown, HIGH);
 }
 
 void error(){
   while (1){
-    digitalWrite(fwdOut,LOW);
-    digitalWrite(backOut,LOW);
-    digitalWrite(upOut, LOW);
-    digitalWrite(downOut, LOW);
+    digitalWrite(moveCartFwd,LOW);
+    digitalWrite(moveCartBack,LOW);
+    digitalWrite(moveLiftUp, LOW);
+    digitalWrite(moveLiftDown, LOW);
     digitalWrite(ERROR_PIN,HIGH);
     Serial.println("ERROR");
     Serial.println(currState);
