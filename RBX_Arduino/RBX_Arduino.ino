@@ -1,11 +1,4 @@
 /*
- Bit 0 = fwdIn        // manual carts forward --> manCartFwd
- Bit 1 = backIn       // manual carts back  -->  manCartBack
- Bit 2 = fwdStopIn    // button at front of ramp  --> cartAtFront
- Bit 3 = backStopIn   // button at back of ramp  --> cartAtBack
- Bit 4 = manual up    // manual lift up  --> manLiftUp
- Bit 5 = manual down  // manual lift down  --> manLiftDown
- Bit 6 = down endstop // lift down button  --> liftAtBottom
  Bit 0 = manCartFwd
  Bit 1 = manCartBack
  Bit 2 = cartAtFront
@@ -28,10 +21,6 @@
  
 /*
 OUTPUTS:
-   1. moveFwdOut  //moving carts forward  --> moveCartFwd
-   2. movRevOut  // moving carts backward  --> moveCartBack
-   3. liftUpOut  // moving lift up  --> moveLiftUp
-   4. liftDownOut  // moving lift down  --> moveLiftDown
    1. moveCartFwd
    2. moveCartBack
    3. moveLiftUp
@@ -52,53 +41,81 @@ const int fwdStopIn = 4;   //D4 cartAtFront
 const int backStopIn = 10; //B6  cartAtBack
 
 //3 inputs for lift
-const int manualUp = 6;     //D7  manLiftUp
-const int manualDown = 12;  //D6  manLiftDown
-const int downStopIn = 3;   //D0  liftAtBottom
+//const int manualUp = 6;     //D7  manLiftUp
+const int manualUp = 15;     //B1  manLiftUp
+//const int manualDown = 12;  //D6  manLiftDown
+const int manualDown = 17;  //B0  manLiftDown
+//const int downStopIn = 3;   //D0  liftAtBottom
+const int downStopIn = 9;   //B5  liftAtBottom
 
 //ERROR PIN
 const int ERROR_PIN = 7;    //E6
+ 
 
 //4 outputs
 const int fwdOut = 13;      //C7  moveCartFwd
 const int backOut = 5;      //C6  moveCartBack
-const int upOut = 15;       //B1  moveLiftUp
-const int downOut = 17;     //B0  moveLiftDown
+//const int upOut = 15;       //B1  moveLiftUp
+const int upOut = 6;       //D7  moveLiftUp
+//const int downOut = 17;     //B0  moveLiftDown
+const int downOut = 12;     //D6  moveLiftDown
 
-uint16_t prevState = 0x00;
-uint16_t currState = 0x00;
+/* Variables to hold the current and previous states */
+uint16_t prevState = 0x0000;
+uint16_t currState = 0x0000;
 
 
 void setup() {
   Serial.begin(9600);
-
+ 
+// Set ramp signals as inputs
   pinMode(fwdIn, INPUT);
   pinMode(backIn, INPUT);
   pinMode(fwdStopIn, INPUT);
   pinMode(backStopIn, INPUT);
+  
+// Set lift signals as inputs
+  pinMode(manualUp, INPUT);
+  pinMode(manualDown, INPUT);
+  pinMode(downStopIn, INPUT);
 
+// Set output pins:
   pinMode(ERROR_PIN,OUTPUT);
   pinMode(fwdOut,OUTPUT);
   pinMode(backOut,OUTPUT);
   pinMode(upOut, OUTPUT);
   pinMode(downOut, OUTPUT);
 
+// Set the inputs as high (since active low)
   digitalWrite(fwdIn, HIGH);
   digitalWrite(backIn, HIGH);
   digitalWrite(fwdStopIn, HIGH);
   digitalWrite(backStopIn, HIGH);
+  
+  digitalWrite(manualUp, HIGH);
+  digitalWrite(manualDown, HIGH);
+  digitalWrite(downStopIn, HIGH);
 
+// Set outputs as low initially
   digitalWrite(ERROR_PIN,LOW);
   digitalWrite(fwdOut, LOW);
   digitalWrite(backOut, LOW);
+  digitalWrite(upOut, LOW);
+  digitalWrite(downOut, LOW);
 }
 
+/* This function takes all of the inputs and adds it into 
+   the state to be returned (currstate). All inputs are 
+   active low. */
 uint16_t checkInputs(){
   uint8_t tempState = 0x00;
   tempState |= (!digitalRead(fwdIn)) << FWD_IN_OFFSET;
   tempState |= (!digitalRead(backIn)) << BACK_IN_OFFSET;
   tempState |= (!digitalRead(fwdStopIn)) << FWD_STOP_IN;
   tempState |= (!digitalRead(backStopIn)) << BACK_STOP_IN;  
+  tempState |= (!digitalRead(manualUp)) << UP_IN_OFFSET;
+  tempState |= (!digitalRead(manualDown)) << DOWN_IN_OFFSET;
+  tempState |= (!digitalRead(downStopIn)) << DOWN_STOP_IN;
   return tempState;
 }
 
@@ -126,7 +143,9 @@ void loop() {
     movFwd();
     break;
 
-  case 0x05: //MOVE FWD, BUT FWD END IS ON
+  //case 0x05: //MOVE FWD, BUT FWD END IS ON
+  case 0x45: // MOVE FWD, BUT FWD END IS ON
+  case 0x4A: // MOVE BACKWARE, BUT BACK END IS ON
     stopCarts();
     break;
 
@@ -135,8 +154,27 @@ void loop() {
     movRev();
     break;
 
-  case 0x0A:  //MOVE BACKWARD, BUT BACK END IS ON
-    stopCarts();
+//adding new states
+  case 0x14:  //MANUAL RAISE LIFT IS ON, CARTS IN FRONT
+  case 0x18:  //MANUAL RAISE LIFT IS ON, CARTS IN BACK
+  case 0x54:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN FRONT
+  case 0x58:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN BACK
+    movUp();
+    break;
+    
+  case 0x04:  //CART IS RAISED, BUT NOT MOVING, CARTS IN FRONT
+  case 0x08:  //CART IS RAISED, BUT NOT MOVING, CARTS IN BACK
+    stopLift();
+    break;
+    
+  case 0x24:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN FRONT
+  case 0x28:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN BACK
+    movDown();
+    break;
+    
+  case 0x64:  //MOVE DOWN, BUT DOWN ENDSTOP IS ON, CARTS ARE IN FRONT
+  case 0x68:  //MOVE DOWN, BUT DOWN ENDSTOP IS ON, CARTS IN BACK
+    stopLift();
     break;
 
   default: //LOL GG DONE MESSED UP SON
@@ -185,6 +223,7 @@ void error(){
     digitalWrite(downOut, LOW);
     digitalWrite(ERROR_PIN,HIGH);
     Serial.println("ERROR");
+    Serial.println(currState);
     delay(5000);
   }
 }
