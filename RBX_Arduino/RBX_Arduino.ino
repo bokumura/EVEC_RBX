@@ -49,6 +49,8 @@ const int ERROR_PIN = 7;    //E6
 //2 outputs
 const int fwdOut = 13;      //C7
 const int backOut = 5;      //C6
+const int upOut = 15;       //B1
+const int downOut = 17;     //B0
 
 uint16_t prevState = 0x00;
 uint16_t currState = 0x00;
@@ -65,11 +67,8 @@ void setup() {
   pinMode(ERROR_PIN,OUTPUT);
   pinMode(fwdOut,OUTPUT);
   pinMode(backOut,OUTPUT);
-<<<<<<< HEAD
-=======
   pinMode(upOut, OUTPUT);
   pinMode(downOut, OUTPUT);
->>>>>>> origin/Manual-Lift-Control
 
   digitalWrite(fwdIn, HIGH);
   digitalWrite(backIn, HIGH);
@@ -102,15 +101,6 @@ void loop() {
     stopCarts();
     break;
 
-<<<<<<< HEAD
-  case 0x04: //FWD END ON, NOT MOVING
-  case 0x08: //BACK END IS ON, NOT MOVING
-    stopCarts();
-    break;
-
-  case 0x01: //MOVE FWD SWITCH IS ON
-  case 0x09: //MOVE FWD, BACK END IS ON
-=======
   case 0x40: //LIFT IS DOWN, NOT MOVING
   case 0x44: //FWD END ON, DOWN ON, NOT MOVING
   case 0x48: //BACK END ON, DOWN ON, NOT MOVING
@@ -120,7 +110,6 @@ void loop() {
 
   case 0x41: //MOVE FWD SWITCH IS ON
   case 0x49: //MOVE FWD, BACK END IS ON
->>>>>>> origin/Manual-Lift-Control
     movFwd();
     break;
 
@@ -128,13 +117,8 @@ void loop() {
     stopCarts();
     break;
 
-<<<<<<< HEAD
-  case 0x02: //MOVE BACKWARD SWITCH IS ON
-  case 0x06: //MOVE BACKWARD, FWD END IS ON
-=======
   case 0x42: //MOVE BACKWARD SWITCH IS ON
   case 0x46: //MOVE BACKWARD, FWD END IS ON
->>>>>>> origin/Manual-Lift-Control
     movRev();
     break;
 
@@ -163,8 +147,6 @@ void stopCarts(){
 void movRev(){
   digitalWrite(fwdOut,LOW);
   digitalWrite(backOut,HIGH); 
-<<<<<<< HEAD
-=======
 }
 
 void movUp(){
@@ -180,18 +162,14 @@ void stopLift(){
 void movDown(){
   digitalWrite(upOut, LOW);
   digitalWrite(downOut, HIGH);
->>>>>>> origin/Manual-Lift-Control
 }
 
 void error(){
   while (1){
     digitalWrite(fwdOut,LOW);
     digitalWrite(backOut,LOW);
-<<<<<<< HEAD
-=======
     digitalWrite(upOut, LOW);
     digitalWrite(downOut, LOW);
->>>>>>> origin/Manual-Lift-Control
     digitalWrite(ERROR_PIN,HIGH);
     Serial.println("ERROR");
     delay(5000);
