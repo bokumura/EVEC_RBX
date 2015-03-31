@@ -1,0 +1,56 @@
+===================
+I.O. For RBX
+===================
+
+Ramp{
+  Inputs{
+    Manual{
+      Lift Up
+      Lift Down
+      Cart Forward
+      Cart Back
+      Emergency Stop
+    }
+    Sensors{
+      Lift is Down
+      Carts is Fwd
+      Carts is Rear
+      Charger Sense
+    }
+  }
+  Outputs{
+    Ready light
+    Error Light
+    Fwd Charger On
+    Read Charger On
+    Fwd Charger Select Relay
+    Rear Charger Select Relay
+    Move Carts Fwd
+    Move Carts Rear
+    Move lift Up
+    Move lift Down
+    x-bee
+  }
+}
+
+Van{
+  Input{
+    Manual{
+      Actuators In
+      Actuators Out
+      Start Exchange
+    }
+    Sensors{
+      Lift Up
+      Actuators Position
+    }
+  }
+  Output{
+    Ready Light
+    Error Light
+    Inprogress Light
+    Actuators In
+    Actuators Out
+    x-bee
+  }
+}
