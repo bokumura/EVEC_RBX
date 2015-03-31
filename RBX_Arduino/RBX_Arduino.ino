@@ -15,14 +15,16 @@
  Bit 13 = unassigned
  Bit 14 = unassigned
  Bit 15 = unassigned
+ input: <man> <Obj> <Back/Front | up/down>
+ output: <Obj> At <Where>
  */
  
 /*
 OUTPUTS:
-   1. moveFwd
-   2. movRev
-   3. liftUp
-   4. liftDown
+   1. moveFwdOut  //moving carts forward  --> moveCartFwd
+   2. movRevOut  // moving carts backward  --> moveCartBack
+   3. liftUpOut  // moving lift up  --> moveLiftUp
+   4. liftDownOut  // moving lift down  --> moveLiftDown
  */
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
@@ -33,24 +35,24 @@ const int DOWN_IN_OFFSET = 5;
 const int DOWN_STOP_IN = 6;
 
 //4 inputs for ramp
-const int fwdIn = 16;      //B2 
-const int backIn = 14;     //B3 
-const int fwdStopIn = 4;   //D4
-const int backStopIn = 10; //B6
+const int fwdIn = 16;      //B2 manCartFwd
+const int backIn = 14;     //B3 manCartBack
+const int fwdStopIn = 4;   //D4 cartAtFront
+const int backStopIn = 10; //B6  cartAtBack
 
 //3 inputs for lift
-const int manualUp = 6;     //D7  
-const int manualDown = 12;  //D6
-const int downStopIn = 3;   //D0
+const int manualUp = 6;     //D7  manLiftUp
+const int manualDown = 12;  //D6  manLiftDown
+const int downStopIn = 3;   //D0  liftAtBottom
 
 //ERROR PIN
 const int ERROR_PIN = 7;    //E6
 
-//2 outputs
-const int fwdOut = 13;      //C7
-const int backOut = 5;      //C6
-const int upOut = 15;       //B1
-const int downOut = 17;     //B0
+//4 outputs
+const int fwdOut = 13;      //C7  moveCartFwd
+const int backOut = 5;      //C6  moveCartBack
+const int upOut = 15;       //B1  moveLiftUp
+const int downOut = 17;     //B0  moveLiftDown
 
 uint16_t prevState = 0x00;
 uint16_t currState = 0x00;
