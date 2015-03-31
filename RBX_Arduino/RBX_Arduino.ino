@@ -15,6 +15,8 @@
  Bit 13 = unassigned
  Bit 14 = unassigned
  Bit 15 = unassigned
+ input: <man> <Obj> <Back/Front | up/down>
+ output: <Obj> At <Where>
  */
  
 /*
