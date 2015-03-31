@@ -6,6 +6,13 @@
  Bit 4 = manual up    // manual lift up  --> manLiftUp
  Bit 5 = manual down  // manual lift down  --> manLiftDown
  Bit 6 = down endstop // lift down button  --> liftAtBottom
+ Bit 0 = manCartFwd
+ Bit 1 = manCartBack
+ Bit 2 = cartAtFront
+ Bit 3 = cartAtBack
+ Bit 4 = manLiftUp
+ Bit 5 = manLiftDown
+ Bit 6 = liftAtBottom
  Bit 7 = unassigned
  Bit 8 = unassigned
  Bit 9 = unassigned
@@ -25,6 +32,10 @@ OUTPUTS:
    2. movRevOut  // moving carts backward  --> moveCartBack
    3. liftUpOut  // moving lift up  --> moveLiftUp
    4. liftDownOut  // moving lift down  --> moveLiftDown
+   1. moveCartFwd
+   2. moveCartBack
+   3. moveLiftUp
+   4. moveLiftDown
  */
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
