@@ -1,12 +1,12 @@
 /*
- Bit 0 = fwdIn
- Bit 1 = backIn
- Bit 2 = fwdStopIn
- Bit 3 = backStopIn  
- Bit 4 = manual up
- Bit 5 = manual down
- Bit 6 = down endstop
- Bit 7 = something
+ Bit 0 = fwdIn        // manual carts forward --> manCartFwd
+ Bit 1 = backIn       // manual carts back  -->  manCartBack
+ Bit 2 = fwdStopIn    // button at front of ramp  --> cartAtFront
+ Bit 3 = backStopIn   // button at back of ramp  --> cartAtBack
+ Bit 4 = manual up    // manual lift up  --> manLiftUp
+ Bit 5 = manual down  // manual lift down  --> manLiftDown
+ Bit 6 = down endstop // lift down button  --> liftAtBottom
+ Bit 7 = unassigned
  Bit 8 = unassigned
  Bit 9 = unassigned
  Bit 10 = unassigned
