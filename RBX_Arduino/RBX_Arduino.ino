@@ -48,7 +48,6 @@ const int liftAtBottom = 9;  //B5
 //ERROR PIN
 const int ERROR_PIN = 7;    //E6
  
-
 //4 outputs
 const int moveCartFwd = 13;   //C7
 const int moveCartBack = 5;   //C6
@@ -58,7 +57,6 @@ const int moveLiftDown = 12;  //D6
 /* Variables to hold the current and previous states */
 uint16_t prevState = 0x0000;
 uint16_t currState = 0x0000;
-
 
 void setup() {
   Serial.begin(9600);
@@ -122,10 +120,6 @@ void loop() {
   delay(100);
 
   switch (currState) {
-  case 0x00:
-    stopCarts();
-    break;
-
   case 0x40: //LIFT IS DOWN, NOT MOVING
   case 0x44: //FWD END ON, DOWN ON, NOT MOVING
   case 0x48: //BACK END ON, DOWN ON, NOT MOVING
@@ -149,7 +143,6 @@ void loop() {
     movRev();
     break;
 
-//adding new states
   case 0x14:  //MANUAL RAISE LIFT IS ON, CARTS IN FRONT
   case 0x18:  //MANUAL RAISE LIFT IS ON, CARTS IN BACK
   case 0x54:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN FRONT
@@ -176,9 +169,7 @@ void loop() {
     error();
     break;
   } 
-
 }
-
 
 void movFwd(){
   digitalWrite(moveCartBack,LOW);
