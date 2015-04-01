@@ -23,16 +23,16 @@ const int ACTUATORS_ENGAGED_THRESHHOLD = 8;
 
 //Inputs for van
 const int manActuatorsEngage = 16;  //B2 = Digital pin 16
-const int manActuatorsDisengage = 15  //B1 = Digital pin 15
+const int manActuatorsDisengage = 15;  //B1 = Digital pin 15
 const int frontActuatorLocationPin = 0;  //F7 = Analog pin 0
 const int rearActuatorLocationPin = 1;  //F6 = Analog pin 1
 
 //ERROR PIN
-const int ERROR_PIN = 7  //E6
+const int ERROR_PIN = 7;  //E6
 
 //Outputs
-const int movActuatorsEngage = 6  //D7 = Digital pin 6
-const int movActuatorsDisengage = 12  //D6 = Digital pin 12
+const int movActuatorsEngage = 6;  //D7 = Digital pin 6
+const int movActuatorsDisengage = 12;  //D6 = Digital pin 12
 
 //Current State
 uint8_t currState = 0x00;
@@ -57,8 +57,8 @@ void setup() {
   
   //Initialize outputs to low
   digitalWrite(ERROR_PIN, LOW);
-  digitalWrite(movEngageActuators, LOW);
-  digitalWrite(movDisengageActuators, LOW);
+  digitalWrite(movActuatorsEngage, LOW);
+  digitalWrite(movActuatorsDisengage, LOW);
 }
 
 /* This function takes all inputs and ORs them onto the proper
