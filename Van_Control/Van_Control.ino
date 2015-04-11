@@ -14,12 +14,12 @@ OUTPUTS:
 //Offsets of signals in curState
 const int MAN_ACTUATORS_ENGAGE_OFFSET = 0;
 const int MAN_ACTUATORS_DISENGAGE_OFFSET = 1;
-const int ACTUATORS_ENGAGED_OFFSET = 2;
-const int ACTUATORS_DISENGAGED_OFFSET = 3;
+const int ACTUATORS_DISENGAGED_OFFSET = 2;
+const int ACTUATORS_ENGAGED_OFFSET = 3;
 
 //Threshholds for actuator placement
-const int ACTUATORS_DISENGAGED_THRESHHOLD = 177;
-const int ACTUATORS_ENGAGED_THRESHHOLD = 8;
+const int ACTUATORS_DISENGAGED_THRESHHOLD = 35;
+const int ACTUATORS_ENGAGED_THRESHHOLD = 750;
 
 //Inputs for van
 const int manActuatorsEngage = 16;  //B2 = Digital pin 16
@@ -69,18 +69,24 @@ uint8_t checkInputs() {
   uint8_t tempState = 0x00;
   tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
   tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
+  
   tempState |= ((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
     && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))
     << ACTUATORS_ENGAGED_OFFSET;
   tempState |= ((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
     && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
     << ACTUATORS_DISENGAGED_OFFSET;
+    
+   Serial.print("Front Acctuator: ");
+   Serial.println(analogRead(frontActuatorLocationPin));
+   Serial.print("Back Acctuator: ");
+   Serial.println(analogRead(rearActuatorLocationPin));
   return tempState;
 }
 
 void loop() {
   currState = checkInputs();
-  Serial.print("State: ");
+  Serial.print("TEMPState: ");
   Serial.println(currState);
   delay(100);
   
