@@ -54,6 +54,16 @@ const int moveCartBack = 5;   //C6
 const int moveLiftUp = 6;     //D7
 const int moveLiftDown = 12;  //D6
 
+//outputs for checking battery location
+const int rearChargerSelect = 21; //F4
+const int frontChargerSelect = 22; //F1
+
+//input for checking battery location
+const int optoIsolator = 19; //F6
+
+//enum for battery location
+typedef enum {FRONT, BACK} batteryLocation;
+
 /* Variables to hold the current and previous states */
 uint16_t prevState = 0x0000;
 uint16_t currState = 0x0000;
@@ -78,6 +88,13 @@ void setup() {
   pinMode(moveCartBack,OUTPUT);
   pinMode(moveLiftUp, OUTPUT);
   pinMode(moveLiftDown, OUTPUT);
+  
+// Outputs for checking battery location
+  pinMode(rearChargerSelect, OUTPUT);
+  pinMode(frontChargerSelect, OUTPUT);
+  
+// Input for opto isolator
+  pinMode(optoIsolator, INPUT);
 
 // Set the inputs as high (since active low)
   digitalWrite(manCartFwd, HIGH);
@@ -88,6 +105,8 @@ void setup() {
   digitalWrite(manLiftUp, HIGH);
   digitalWrite(manLiftDown, HIGH);
   digitalWrite(liftAtBottom, HIGH);
+  
+  // don't set optoIsolator high [it is done in checkForBattery()]
 
 // Set outputs as low initially
   digitalWrite(ERROR_PIN,LOW);
@@ -95,6 +114,9 @@ void setup() {
   digitalWrite(moveCartBack, LOW);
   digitalWrite(moveLiftUp, LOW);
   digitalWrite(moveLiftDown, LOW);
+  
+  digitalWrite(rearChargerSelect, LOW);
+  digitalWrite(frontChargerSelect, LOW);
 }
 
 /* This function takes all of the inputs and adds it into 
@@ -117,7 +139,14 @@ void loop() {
   currState = checkInputs();
   Serial.print("State: ");
   Serial.println(currState);
+  Serial1.print(currState);
   delay(100);
+  if (Serial1.available() > 0){
+    uint16_t incoming = Serial1.read() << 8;
+    incoming |= Serial1.read();
+    Serial.print("External State: ");
+    Serial.println(incoming);
+  }
 
   switch (currState) {
   case 0x40: //LIFT IS DOWN, NOT MOVING
@@ -200,6 +229,20 @@ void movDown(){
   digitalWrite(moveLiftUp, LOW);
   digitalWrite(moveLiftDown, HIGH);
 }
+
+/*
+unsigned char checkForBattery(batteryLocation location){
+  unsigned char foundBattery = 0;
+  digitalWrite(optoIsolator, HIGH);
+  digitalWrite(RearChargerSelect, LOW);
+  digitalWrite(FrontChargerSelect, HIGH);
+  delay(50);
+  if (!digitalRead(optoIsolator))
+    foundBattery = 1;
+  digitalWrite(FrontChargerSelect, LOW);
+  digitalWrite(optoIsolator, LOW);
+  return 0;
+} */
 
 void error(){
   while (1){
