@@ -39,6 +39,7 @@ uint8_t currState = 0x00;
 
 void setup() {
   Serial.begin(9600);
+  Serial1.begin(9600);
   
   //Set actuator signals as inputs
   pinMode(manActuatorsEngage, INPUT);
@@ -77,10 +78,10 @@ uint8_t checkInputs() {
     && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
     << ACTUATORS_DISENGAGED_OFFSET;
     
-   Serial.print("Front Acctuator: ");
-   Serial.println(analogRead(frontActuatorLocationPin));
-   Serial.print("Back Acctuator: ");
-   Serial.println(analogRead(rearActuatorLocationPin));
+   //Serial.print("Front Acctuator: ");
+   //Serial.println(analogRead(frontActuatorLocationPin));
+   //Serial.print("Back Acctuator: ");
+   //Serial.println(analogRead(rearActuatorLocationPin));
   return tempState;
 }
 
@@ -88,6 +89,7 @@ void loop() {
   currState = checkInputs();
   Serial.print("TEMPState: ");
   Serial.println(currState);
+  Serial1.print(currState);
   delay(100);
   
   switch (currState) {
