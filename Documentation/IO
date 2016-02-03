@@ -13,8 +13,8 @@ Ramp{
     }
     Sensors{
       Lift is Down
-      Carts is Fwd
-      Carts is Rear
+      Carts are Fwd
+      Carts are Rear
       Charger Sense
     }
   }
@@ -25,8 +25,8 @@ Ramp{
     Read Charger On
     Fwd Charger Select Relay
     Rear Charger Select Relay
-    Move Carts Fwd
-    Move Carts Rear
+    Move Carts (Fwd & Rear same pin)
+    Motor On (Garage Door Opener)
     Move lift Up
     Move lift Down
     x-bee
