@@ -21,8 +21,8 @@
  
 /*
 OUTPUTS:
-   1. moveCartFwd
-   2. moveCartBack
+   1. moveCartFwd/moveCartBack
+   2. motorOn
    3. moveLiftUp
    4. moveLiftDown
  */
@@ -50,13 +50,14 @@ const int ERROR_PIN = 7;    //E6
  
 //4 outputs
 const int moveCartFwd = 13;   //C7
-const int moveCartBack = 5;   //C6
+const int moveCartBack = 13;   //C7
+const int motorOn = 5;   //C6
 const int moveLiftUp = 6;     //D7
 const int moveLiftDown = 12;  //D6
 
 //outputs for checking battery location
 const int rearChargerSelect = 21; //F4
-const int frontChargerSelect = 22; //F1
+const int frontChargerSelect = 22; //F1 
 
 //input for checking battery location
 const int optoIsolator = 19; //F6
@@ -85,7 +86,8 @@ void setup() {
 // Set output pins:
   pinMode(ERROR_PIN,OUTPUT);
   pinMode(moveCartFwd,OUTPUT);
-  pinMode(moveCartBack,OUTPUT);
+  pinMode(moveCartBack,OUTPUT);	// Is this needed?
+  pinMode(motorOn, OUTPUT);
   pinMode(moveLiftUp, OUTPUT);
   pinMode(moveLiftDown, OUTPUT);
   
@@ -111,12 +113,14 @@ void setup() {
 // Set outputs as low initially
   digitalWrite(ERROR_PIN,LOW);
   digitalWrite(moveCartFwd, LOW);
-  digitalWrite(moveCartBack, LOW);
   digitalWrite(moveLiftUp, LOW);
   digitalWrite(moveLiftDown, LOW);
-  
   digitalWrite(rearChargerSelect, LOW);
   digitalWrite(frontChargerSelect, LOW);
+
+/* SET THIS ONE HIGH! */
+  digitalWrite(motorOn, HIGH);
+  
 }
 
 /* This function takes all of the inputs and adds it into 
@@ -141,7 +145,7 @@ void loop() {
   Serial.println(currState);
   Serial1.print(currState);
   delay(100);
-  if (Serial1.available() > 0){
+  if (Serial1.available() > 0) {
     uint16_t incoming = Serial1.read() << 8;
     incoming |= Serial1.read();
     Serial.print("External State: ");
@@ -149,9 +153,19 @@ void loop() {
   }
 
   switch (currState) {
+  case 0x01: //LIFT NOT DOWN, BUT WANT TO MOVE
+  case 0x02: 
+  case 0x04: 
+  case 0x05:
+  case 0x06:
+  case 0x08:
+  case 0x09:
+  case 0x0A:
+    break;
+    
   case 0x40: //LIFT IS DOWN, NOT MOVING
-  case 0x44: //FWD END ON, DOWN ON, NOT MOVING
-  case 0x48: //BACK END ON, DOWN ON, NOT MOVING
+  case 0x44: //FWD END ON, LIFT DOWN, NOT MOVING
+  case 0x48: //BACK END ON, LIFT DOWN, NOT MOVING
     stopCarts();
     stopLift();
     break;
@@ -179,10 +193,10 @@ void loop() {
     movUp();
     break;
     
-  case 0x04:  //CART IS RAISED, BUT NOT MOVING, CARTS IN FRONT
-  case 0x08:  //CART IS RAISED, BUT NOT MOVING, CARTS IN BACK
-    stopLift();
-    break;
+  //case 0x04:  //CART IS RAISED, BUT NOT MOVING, CARTS IN FRONT
+  //case 0x08:  //CART IS RAISED, BUT NOT MOVING, CARTS IN BACK
+    //stopLift();
+    //break;
     
   case 0x24:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN FRONT
   case 0x28:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN BACK
@@ -201,18 +215,19 @@ void loop() {
 }
 
 void movFwd(){
-  digitalWrite(moveCartBack,LOW);
   digitalWrite(moveCartFwd,HIGH);
+  delay(500);
+  digitalWrite(moveCartFwd, LOW);
 }
 
 void stopCarts(){
   digitalWrite(moveCartFwd,LOW);
-  digitalWrite(moveCartBack,LOW);
 }
 
 void movRev(){
-  digitalWrite(moveCartFwd,LOW);
   digitalWrite(moveCartBack,HIGH); 
+  delay(500);
+  digitalWrite(moveCartBack, LOW);
 }
 
 void movUp(){
@@ -247,7 +262,7 @@ unsigned char checkForBattery(batteryLocation location){
 void error(){
   while (1){
     digitalWrite(moveCartFwd,LOW);
-    digitalWrite(moveCartBack,LOW);
+	 digitalWrite(motorOn, LOW);
     digitalWrite(moveLiftUp, LOW);
     digitalWrite(moveLiftDown, LOW);
     digitalWrite(ERROR_PIN,HIGH);
