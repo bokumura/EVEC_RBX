@@ -25,8 +25,8 @@ Ramp{
     Read Charger On
     Fwd Charger Select Relay
     Rear Charger Select Relay
-    Move Carts Fwd
-    Move Carts Rear
+    Move Carts (Fwd & Rear same pin)
+    Motor On
     Move lift Up
     Move lift Down
     x-bee

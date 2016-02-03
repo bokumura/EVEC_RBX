@@ -1,3 +1,4 @@
+/* MANUAL MODE FOR THE RAMP! */
 /*
  Bit 0 = manCartFwd
  Bit 1 = manCartBack
@@ -21,8 +22,8 @@
  
 /*
 OUTPUTS:
-   1. moveCartFwd
-   2. moveCartBack
+   1. moveCartFwd/moveCartBack
+   2. motorOn
    3. moveLiftUp
    4. moveLiftDown
  */
@@ -50,7 +51,8 @@ const int ERROR_PIN = 7;    //E6
  
 //4 outputs
 const int moveCartFwd = 13;   //C7
-const int moveCartBack = 5;   //C6
+const int moveCartBack = 13;   //C7
+const int motorOn = 5;   //C6
 const int moveLiftUp = 6;     //D7
 const int moveLiftDown = 12;  //D6
 
@@ -86,6 +88,7 @@ void setup() {
   pinMode(ERROR_PIN,OUTPUT);
   pinMode(moveCartFwd,OUTPUT);
   pinMode(moveCartBack,OUTPUT);
+  pinMode(motorOn,OUTPUT);
   pinMode(moveLiftUp, OUTPUT);
   pinMode(moveLiftDown, OUTPUT);
   
@@ -111,12 +114,14 @@ void setup() {
 // Set outputs as low initially
   digitalWrite(ERROR_PIN,LOW);
   digitalWrite(moveCartFwd, LOW);
-  digitalWrite(moveCartBack, LOW);
   digitalWrite(moveLiftUp, LOW);
   digitalWrite(moveLiftDown, LOW);
   
   digitalWrite(rearChargerSelect, LOW);
   digitalWrite(frontChargerSelect, LOW);
+
+  /* SET THIS ONE HIGH! */
+  digitalWrite(motorOn, HIGH);
 }
 
 /* This function takes all of the inputs and adds it into 
@@ -149,6 +154,18 @@ void loop() {
   }
 
   switch (currState) {
+
+  /* Lift not all the way down and not moving lift. */
+  case 0x01:
+  case 0x02:
+  case 0x04:
+  case 0x05:
+  case 0x06:
+  case 0x08:
+  case 0x09:
+  case 0x0A:
+  	 break;
+
   case 0x40: //LIFT IS DOWN, NOT MOVING
   case 0x44: //FWD END ON, DOWN ON, NOT MOVING
   case 0x48: //BACK END ON, DOWN ON, NOT MOVING
@@ -161,9 +178,8 @@ void loop() {
     movFwd();
     break;
 
-  //case 0x05: //MOVE FWD, BUT FWD END IS ON
   case 0x45: // MOVE FWD, BUT FWD END IS ON
-  case 0x4A: // MOVE BACKWARE, BUT BACK END IS ON
+  case 0x4A: // MOVE BACKWARD, BUT BACK END IS ON
     stopCarts();
     break;
 
@@ -177,11 +193,6 @@ void loop() {
   case 0x54:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN FRONT
   case 0x58:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN BACK
     movUp();
-    break;
-    
-  case 0x04:  //CART IS RAISED, BUT NOT MOVING, CARTS IN FRONT
-  case 0x08:  //CART IS RAISED, BUT NOT MOVING, CARTS IN BACK
-    stopLift();
     break;
     
   case 0x24:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN FRONT
@@ -201,18 +212,19 @@ void loop() {
 }
 
 void movFwd(){
-  digitalWrite(moveCartBack,LOW);
   digitalWrite(moveCartFwd,HIGH);
+  delay(500);
+  digitalWrite(moveCartFwd,LOW);
 }
 
 void stopCarts(){
   digitalWrite(moveCartFwd,LOW);
-  digitalWrite(moveCartBack,LOW);
 }
 
 void movRev(){
-  digitalWrite(moveCartFwd,LOW);
   digitalWrite(moveCartBack,HIGH); 
+  delay(500);
+  digitalWrite(moveCartBack, LOW); 
 }
 
 void movUp(){
@@ -247,7 +259,7 @@ unsigned char checkForBattery(batteryLocation location){
 void error(){
   while (1){
     digitalWrite(moveCartFwd,LOW);
-    digitalWrite(moveCartBack,LOW);
+    digitalWrite(motorOn, LOW);
     digitalWrite(moveLiftUp, LOW);
     digitalWrite(moveLiftDown, LOW);
     digitalWrite(ERROR_PIN,HIGH);

@@ -52,6 +52,8 @@ void setup() {
   pinMode(movActuatorsEngage, OUTPUT);
   pinMode(movActuatorsDisengage, OUTPUT);
   
+  /* THIS DOESN'T MAKE SENSE ---> THESE ARE INPUTS... CAN'T SET HIGH... */
+  /* IS THIS SUPPOSED TO BE: movActuatorsEngage? */
   //Set digital inputs as high (since active low)
   digitalWrite(manActuatorsEngage, HIGH);
   digitalWrite(manActuatorsDisengage, HIGH);
