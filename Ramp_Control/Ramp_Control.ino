@@ -115,6 +115,7 @@ void setup() {
   digitalWrite(moveCartFwd, LOW);
   digitalWrite(moveLiftUp, LOW);
   digitalWrite(moveLiftDown, LOW);
+
   digitalWrite(rearChargerSelect, LOW);
   digitalWrite(frontChargerSelect, LOW);
 
@@ -153,7 +154,9 @@ void loop() {
   }
 
   switch (currState) {
-  case 0x01: //LIFT NOT DOWN, BUT WANT TO MOVE
+
+  /* Lift not all the way down and not moving lift */
+  case 0x01:
   case 0x02: 
   case 0x04: 
   case 0x05:
@@ -175,9 +178,8 @@ void loop() {
     movFwd();
     break;
 
-  //case 0x05: //MOVE FWD, BUT FWD END IS ON
   case 0x45: // MOVE FWD, BUT FWD END IS ON
-  case 0x4A: // MOVE BACKWARE, BUT BACK END IS ON
+  case 0x4A: // MOVE BACKWARD, BUT BACK END IS ON
     stopCarts();
     break;
 
@@ -192,11 +194,6 @@ void loop() {
   case 0x58:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN BACK
     movUp();
     break;
-    
-  //case 0x04:  //CART IS RAISED, BUT NOT MOVING, CARTS IN FRONT
-  //case 0x08:  //CART IS RAISED, BUT NOT MOVING, CARTS IN BACK
-    //stopLift();
-    //break;
     
   case 0x24:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN FRONT
   case 0x28:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN BACK
