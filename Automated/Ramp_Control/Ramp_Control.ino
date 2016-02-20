@@ -35,6 +35,10 @@ const int DOWN_IN_OFFSET = 5;
 const int DOWN_STOP_IN = 6;
 const int VAN_TIRE_SW = 7;
 
+
+//Emergency Stop Input
+const int emergencyStop = 2; //D1
+
 //4 inputs for ramp
 const int manCartFwd = 16;   //B2
 const int manCartBack = 14;  //B3
@@ -91,6 +95,7 @@ void setup() {
   	pinMode(cartAtFront, INPUT);
   	pinMode(cartAtBack, INPUT);
   	pinMode(vanTireSw, INPUT);
+        pinMode(emergencyStop, INPUT);
 
   	// Set lift signals as inputs
   	pinMode(manLiftUp, INPUT);
@@ -121,6 +126,7 @@ void setup() {
   	digitalWrite(cartAtFront, HIGH);
   	digitalWrite(cartAtBack, HIGH);
   	digitalWrite(vanTireSw, HIGH);
+        digitalWrite(emergencyStop, HIGH);
 
   	digitalWrite(manLiftUp, HIGH);
   	digitalWrite(manLiftDown, HIGH);
@@ -139,6 +145,7 @@ void setup() {
 
   	digitalWrite(rearChargerSelect, LOW);
   	digitalWrite(frontChargerSelect, LOW);
+        attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
 }
 
 /* This function takes all of the inputs and adds it into
@@ -503,7 +510,7 @@ void chargersOff() {
 //  }
 
 void error() {
-	while (1) {
+
     	digitalWrite(moveCartFwd, LOW);
     	digitalWrite(moveCartBack, LOW);
     	digitalWrite(motorOn, LOW);
@@ -512,7 +519,9 @@ void error() {
     	digitalWrite(ERROR_PIN, HIGH);
     	Serial.println("ERROR");
     	Serial.println(currState);
-    	delay(5000);
+        while(1)
+        {
+          
   	}
 }
 uint8_t sendMessage(uint8_t message) {
@@ -546,4 +555,8 @@ void checkSerial() {
       	}
     	}
   	}
+}
+
+void StopISR(){
+  error();
 }
