@@ -193,11 +193,15 @@ void loop() {
   case 0x54:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN FRONT
   case 0x58:  //MANUAL RAISE LIFT IS ON, LIFT IS AT BOTTOM, CARTS IN BACK
     movUp();
+	 while(digitalRead(manLiftUp) == LOW);
+	 stopLift();
     break;
     
   case 0x24:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN FRONT
   case 0x28:  //MOVE DOWN SWITCH IS ON, LIFT IS NOT AT BOTTOM, CARTS IN BACK
     movDown();
+	 while((digitalRead(manLiftDown) == LOW) && digitalRead(liftAtBottom) == HIGH);
+	 stopLift();
     break;
     
   case 0x64:  //MOVE DOWN, BUT DOWN ENDSTOP IS ON, CARTS ARE IN FRONT
