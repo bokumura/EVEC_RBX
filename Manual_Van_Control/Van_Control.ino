@@ -9,7 +9,11 @@ Bit 3 = actuatorsDisengaged
 OUTPUTS:
   1. movEngageActuators
   2. movDisengageActuators
+  3. ERROR_PIN
 */
+
+/* Serial signal for ERROR mode */
+const int ERROR_SIGNAL = 0xFF;
 
 //Offsets of signals in curState
 const int MAN_ACTUATORS_ENGAGE_OFFSET = 0;
@@ -88,35 +92,40 @@ uint8_t checkInputs() {
 }
 
 void loop() {
-  currState = checkInputs();
-  Serial.print("TEMPState: ");
-  Serial.println(currState);
-  Serial1.print(currState);
-  delay(100);
+  	currState = checkInputs();
+  	Serial.print("TEMPState: ");
+  	Serial.println(currState);
+ 	Serial1.print(currState);
+  	delay(100);
   
-  switch (currState) {
-  case 0x00:  //EVERYTHING IS OFF
-  case 0x04:  //ACTUATORS ENGAGED, NOT MOVING
-  case 0x05:  //TRYING TO ENGAGE ACTUATORS, BUT THEY ARE ALREADY ENGAGED
-  case 0x08:  //ACTUATORS DISENGAGED, NOT MOVING
-  case 0x0A:  //TRYING TO DISENGAGE ACTUATORS, BUT THEY ARE ALREADY DISENGAGED
-    stopActuators();
-    break;
+  	if(Serial1.read() == ERROR_SIGNAL) {
+	  	Serial.println("Van caught Error. Shutting Down.");
+		error();
+	}
+	
+ 	switch (currState) {
+  	case 0x00:  //EVERYTHING IS OFF
+  	case 0x04:  //ACTUATORS ENGAGED, NOT MOVING
+  	case 0x05:  //TRYING TO ENGAGE ACTUATORS, BUT THEY ARE ALREADY ENGAGED
+  	case 0x08:  //ACTUATORS DISENGAGED, NOT MOVING
+  	case 0x0A:  //TRYING TO DISENGAGE ACTUATORS, BUT THEY ARE ALREADY DISENGAGED
+    	stopActuators();
+    	break;
     
-  case 0x01:  //ENGAGING ACTUATORS, CURRENTLY NEITHER ENGAGED NOR DISENGAGED
-  case 0x09:  //ENGAGING ACTUATORS, CURRENTLY DISENGAGED
-    engageActuators();
-    break;
+  	case 0x01:  //ENGAGING ACTUATORS, CURRENTLY NEITHER ENGAGED NOR DISENGAGED
+  	case 0x09:  //ENGAGING ACTUATORS, CURRENTLY DISENGAGED
+    	engageActuators();
+    	break;
     
-  case 0x02:  //DISENGAGING ACTUATORS, CURRENTLY NEIGHER ENGAGED NOR DISENGAGED
-  case 0x06:  //DISENGAGING ACTUATORS, CURRENTLY ENGAGED
-    disengageActuators();
-    break;
+  	case 0x02:  //DISENGAGING ACTUATORS, CURRENTLY NEIGHER ENGAGED NOR DISENGAGED
+  	case 0x06:  //DISENGAGING ACTUATORS, CURRENTLY ENGAGED
+    	disengageActuators();
+    	break;
     
-  default:  //LOL GG DONE MESSED UP SON (as Brandon would say)
-    error();
-    break;
-  }
+  	default:  //LOL GG DONE MESSED UP SON (as Brandon would say)
+    	error();
+    	break;
+  	}
 }
 
 void stopActuators() {
@@ -135,6 +144,9 @@ void disengageActuators() {
 }
 
 void error() {
-  digitalWrite(movActuatorsEngage, LOW);
-  digitalWrite(movActuatorsDisengage, LOW);
+	while(1) {
+		stopActuators();
+  		//Serial.println("VAN ERROR. Shutting down!");
+		digitalWrite(ERROR_PIN, HIGH);
+	}
 }

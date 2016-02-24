@@ -27,6 +27,9 @@ OUTPUTS:
    3. moveLiftUp
    4. moveLiftDown
  */
+/* Serial signal for Emergency_Stop_Error */
+const int ERROR_SIGNAL = 0xFF;
+
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
@@ -40,6 +43,9 @@ const int manCartFwd = 16;   //B2
 const int manCartBack = 14;  //B3 
 const int cartAtFront = 4;   //D4
 const int cartAtBack = 10;   //B6  
+
+//Emergency Stop Input
+const int emergencyStop = 2; //D1
 
 //3 inputs for lift
 const int manLiftUp = 15;    //B1
@@ -71,57 +77,62 @@ uint16_t prevState = 0x0000;
 uint16_t currState = 0x0000;
 
 void setup() {
-  Serial.begin(9600);
+  	Serial.begin(9600);
  
-// Set ramp signals as inputs
-  pinMode(manCartFwd, INPUT);
-  pinMode(manCartBack, INPUT);
-  pinMode(cartAtFront, INPUT);
-  pinMode(cartAtBack, INPUT);
+	//Set ramp signals as inputs
+  	pinMode(manCartFwd, INPUT);
+  	pinMode(manCartBack, INPUT);
+  	pinMode(cartAtFront, INPUT);
+  	pinMode(cartAtBack, INPUT);
+  	pinMode(emergencyStop, INPUT);
   
-// Set lift signals as inputs
-  pinMode(manLiftUp, INPUT);
-  pinMode(manLiftDown, INPUT);
-  pinMode(liftAtBottom, INPUT);
+	//Set lift signals as inputs
+  	pinMode(manLiftUp, INPUT);
+  	pinMode(manLiftDown, INPUT);
+  	pinMode(liftAtBottom, INPUT);
 
-// Set output pins:
-  pinMode(ERROR_PIN,OUTPUT);
-  pinMode(moveCartFwd,OUTPUT);
-  pinMode(moveCartBack,OUTPUT);
-  pinMode(motorOn,OUTPUT);
-  pinMode(moveLiftUp, OUTPUT);
-  pinMode(moveLiftDown, OUTPUT);
+	// Set output pins:
+  	pinMode(ERROR_PIN,OUTPUT);
+  	pinMode(moveCartFwd,OUTPUT);
+  	pinMode(moveCartBack,OUTPUT);
+  	pinMode(motorOn,OUTPUT);
+  	pinMode(moveLiftUp, OUTPUT);
+  	pinMode(moveLiftDown, OUTPUT);
   
-// Outputs for checking battery location
-  pinMode(rearChargerSelect, OUTPUT);
-  pinMode(frontChargerSelect, OUTPUT);
+	// Outputs for checking battery location
+  	pinMode(rearChargerSelect, OUTPUT);
+  	pinMode(frontChargerSelect, OUTPUT);
   
-// Input for opto isolator
-  pinMode(optoIsolator, INPUT);
+	// Input for opto isolator
+  	pinMode(optoIsolator, INPUT);
 
-// Set the inputs as high (since active low)
-  digitalWrite(manCartFwd, HIGH);
-  digitalWrite(manCartBack, HIGH);
-  digitalWrite(cartAtFront, HIGH);
-  digitalWrite(cartAtBack, HIGH);
+	// Set the inputs as high (since active low)
+  	digitalWrite(manCartFwd, HIGH);
+  	digitalWrite(manCartBack, HIGH);
+  	digitalWrite(cartAtFront, HIGH);
+  	digitalWrite(cartAtBack, HIGH);
+  	digitalWrite(emergencyStop, HIGH);
   
-  digitalWrite(manLiftUp, HIGH);
-  digitalWrite(manLiftDown, HIGH);
-  digitalWrite(liftAtBottom, HIGH);
+  	digitalWrite(manLiftUp, HIGH);
+  	digitalWrite(manLiftDown, HIGH);
+  	digitalWrite(liftAtBottom, HIGH);
   
-  // don't set optoIsolator high [it is done in checkForBattery()]
+  	// don't set optoIsolator high [it is done in checkForBattery()]
 
-// Set outputs as low initially
-  digitalWrite(ERROR_PIN,LOW);
-  digitalWrite(moveCartFwd, LOW);
-  digitalWrite(moveLiftUp, LOW);
-  digitalWrite(moveLiftDown, LOW);
+	// Set outputs as low initially
+  	digitalWrite(ERROR_PIN,LOW);
+  	digitalWrite(moveCartFwd, LOW);
+  	digitalWrite(moveLiftUp, LOW);
+  	digitalWrite(moveLiftDown, LOW);
   
-  digitalWrite(rearChargerSelect, LOW);
-  digitalWrite(frontChargerSelect, LOW);
+  	digitalWrite(rearChargerSelect, LOW);
+  	digitalWrite(frontChargerSelect, LOW);
 
-  /* SET THIS ONE HIGH! */
-  digitalWrite(motorOn, HIGH);
+  	/* SET THIS ONE HIGH! */
+  	digitalWrite(motorOn, HIGH);
+
+	/* INTERRPUT! */
+	attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
 }
 
 /* This function takes all of the inputs and adds it into 
@@ -260,15 +271,21 @@ unsigned char checkForBattery(batteryLocation location){
   return 0;
 } */
 
-void error(){
-  while (1){
-    digitalWrite(moveCartFwd,LOW);
-    digitalWrite(motorOn, LOW);
-    digitalWrite(moveLiftUp, LOW);
-    digitalWrite(moveLiftDown, LOW);
-    digitalWrite(ERROR_PIN,HIGH);
-    Serial.println("ERROR");
-    Serial.println(currState);
-    delay(5000);
-  }
+void error() {
+   Serial1.write(ERROR_SIGNAL);
+	while (1){
+    	digitalWrite(moveCartFwd,LOW);
+    	digitalWrite(motorOn, LOW);
+    	digitalWrite(moveLiftUp, LOW);
+    	digitalWrite(moveLiftDown, LOW);
+    	digitalWrite(ERROR_PIN,HIGH);
+    	Serial.println("ERROR");
+    	Serial.println(currState);
+    	delay(5000);
+  	}
+}
+
+void StopISR() {
+	Serial.println("Emergency Stop Button Pressed!");
+	error();
 }

@@ -10,6 +10,10 @@ OUTPUTS:
   1. movEngageActuators
   2. movDisengageActuators
 */
+
+/* Serial signal for ERROR! */
+const int ERROR_SIGNAL = 0xFF;
+
 volatile unsigned long last_micros;
 //Offsets of signals in curState
 const int MAN_ACTUATORS_ENGAGE_OFFSET = 0;
@@ -273,8 +277,11 @@ void actuatorsIn() {
 }
 
 void error() {
-  digitalWrite(movActuatorsEngage, LOW);
-  digitalWrite(movActuatorsDisengage, LOW);
+	while(1) {
+		Serial.println("Van ERROR. Power down. ");
+		stopActuators();
+		digitalWrite(ERROR_PIN, HIGH);
+	}
 }
 
 uint8_t sendMessage(uint8_t message)
@@ -303,6 +310,10 @@ void checkSerial()
   {
     temp = Serial1.read();
     //Serial1.write(0x02);
+	 if(temp == ERROR_SIGNAL) {
+		 autoState = STOP;
+		 error();
+	 }
     if(temp == 0x01)
     {
      rampReady = true; 

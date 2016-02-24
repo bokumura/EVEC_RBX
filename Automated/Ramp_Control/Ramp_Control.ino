@@ -26,6 +26,10 @@ OUTPUTS:
    3. moveLiftUp
    4. moveLiftDown
  */
+
+/* Serial signal for ERROR! */
+const int ERROR_SIGNAL = 0xFF;
+
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
@@ -56,8 +60,10 @@ const int ERROR_PIN = 7;    //E6
 
 //INPUT for van switch
 const int vanTireSw = 3;  //D0
+
 //READY PIN
 const int READY_PIN = 11;     //B7
+
 //4 outputs
 const int moveCartFwd = 13;   //C7
 const int moveCartBack = 13;  //C7
@@ -95,7 +101,7 @@ void setup() {
   	pinMode(cartAtFront, INPUT);
   	pinMode(cartAtBack, INPUT);
   	pinMode(vanTireSw, INPUT);
-        pinMode(emergencyStop, INPUT);
+   pinMode(emergencyStop, INPUT);
 
   	// Set lift signals as inputs
   	pinMode(manLiftUp, INPUT);
@@ -126,7 +132,7 @@ void setup() {
   	digitalWrite(cartAtFront, HIGH);
   	digitalWrite(cartAtBack, HIGH);
   	digitalWrite(vanTireSw, HIGH);
-        digitalWrite(emergencyStop, HIGH);
+   digitalWrite(emergencyStop, HIGH);
 
   	digitalWrite(manLiftUp, HIGH);
   	digitalWrite(manLiftDown, HIGH);
@@ -145,7 +151,7 @@ void setup() {
 
   	digitalWrite(rearChargerSelect, LOW);
   	digitalWrite(frontChargerSelect, LOW);
-        attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
+   attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
 }
 
 /* This function takes all of the inputs and adds it into
@@ -188,12 +194,16 @@ void loop() {
          	Serial.print("State: ");
           	uint8_t outState = (uint8_t)currState;
           	Serial.println(outState);
-          	if (currState == 0xC4) {
+				if(digitalRead(emergencyStop) == LOW) {
+					Serial.println("Emergency Stop Button Pressed. ERROR!");
+					error();
+				}
+          	if(currState == 0xC4) {
             	//ramp is ready for exchange to begin
             	autoState = INIT_CHARGERS;
             	Serial.println(autoState);
           	}
-          	if (currState == 0xC8) {
+          	if(currState == 0xC8) {
             	autoState = INIT_CHARGERS;
             	Serial.println(autoState);
           	}
@@ -510,7 +520,7 @@ void chargersOff() {
 //  }
 
 void error() {
-
+		Serial1.write(ERROR_SIGNAL);
     	digitalWrite(moveCartFwd, LOW);
     	digitalWrite(moveCartBack, LOW);
     	digitalWrite(motorOn, LOW);
@@ -519,10 +529,9 @@ void error() {
     	digitalWrite(ERROR_PIN, HIGH);
     	Serial.println("ERROR");
     	Serial.println(currState);
-        while(1)
-        {
+      while(1) {
           
-  	}
+  		}
 }
 uint8_t sendMessage(uint8_t message) {
 	bool response = false;
@@ -557,6 +566,7 @@ void checkSerial() {
   	}
 }
 
-void StopISR(){
-  error();
+void StopISR() {
+	Serial.println("Emergency Stop Button Pressed!");
+  	error();
 }
