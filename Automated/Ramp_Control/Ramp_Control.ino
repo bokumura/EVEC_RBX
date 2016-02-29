@@ -21,11 +21,11 @@
 
 /*
 OUTPUTS:
-   1. moveCart[FWD/Back]
+	1. moveCart[FWD/Back]
    2. motorOn
    3. moveLiftUp
-   4. moveLiftDown
- */
+	4. moveLiftDown
+*/
 
 /* Serial signal for ERROR! */
 const int ERROR_SIGNAL = 0xFF;
@@ -55,8 +55,8 @@ const int manLiftDown = 17;  //B0
 const int liftAtBottom = 9;  //B5
 
 //ERROR PIN
-const int ERROR_PIN = 7;    //E6
-
+//const int ERROR_PIN = 7;    //E6
+const int ERROR_PIN = 7;    //D5
 
 //INPUT for van switch
 const int vanTireSw = 3;  //D0
@@ -80,16 +80,10 @@ const int energiseCharger = 20; //F5
 const int frontBatteryCheck = 19; //F6
 const int backBatteryCheck = 18;//F7
 
-
 const int BATTERY_VOLTAGE_MIN_DIFFERENCE = 2;
 
 //enum for battery location
 typedef enum {FRONT, BACK} batteryLocation;
-
-/* Variables to hold the current and previous states */
-uint16_t prevState = 0x0000;
-uint16_t currState = 0x0000;
-bool vanReady = false;
 
 void setup() {
 	Serial.begin(115200);
@@ -151,7 +145,7 @@ void setup() {
 
   	digitalWrite(rearChargerSelect, LOW);
   	digitalWrite(frontChargerSelect, LOW);
-   attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(emergencyStop), StopISR, FALLING);
 }
 
 /* This function takes all of the inputs and adds it into
@@ -169,7 +163,7 @@ uint16_t checkInputs() {
   	tempState |= (!digitalRead(vanTireSw)) << VAN_TIRE_SW;
   	return tempState;
 }
-enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS};
+enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
 State autoState = INIT;
 bool actuatorPosition = true;
 bool exchangeDone = false;
@@ -177,106 +171,131 @@ bool packInFrontCart = false;
 bool packInBackCart = false;
 bool frontChecked = false;
 bool backChecked = false;
+bool vanReady = false;
 int frontBatteryVoltage = 0;
 int backBatteryVoltage = 0;
-void loop() {
 
+/* Variables to hold the current and previous states */
+uint16_t prevState = 0x0000;
+uint16_t currState = 0x0000;
+
+void loop() {
 	while (autoState != STOP) {
    	checkSerial();
-    	switch (autoState)
-    	{
+    	switch (autoState) {
       	case INIT:
-        	{
-          	actuatorPosition = true;
+         	actuatorPosition = true;
           	exchangeDone = false;
           	prevState = currState;
           	currState = checkInputs();
          	Serial.print("State: ");
-          	uint8_t outState = (uint8_t)currState;
-          	Serial.println(outState);
-				if(digitalRead(emergencyStop) == LOW) {
-					Serial.println("Emergency Stop Button Pressed. ERROR!");
-					error();
+          	Serial.println((uint8_t)currState);
+
+				/* Need to check if emergencyStop was pressed when 
+				 	starting initialization. Would need to go into error mode... */
+			  	if(digitalRead(emergencyStop) == LOW) {
+					  Serial.println("Emergency Stop Button Pressed. ERROR!");
+					  error();
 				}
+				
+				if(currState == 0x48) {
+					autoState = INIT_CHARGERS;
+					Serial.println(autoState);
+				}
+				
+				if(currState == 0x44) {
+					autoState = INIT_CHARGERS;
+					Serial.println(autoState);
+				}
+				/* Ramp is ready for exchange to begin */
           	if(currState == 0xC4) {
-            	//ramp is ready for exchange to begin
-            	autoState = INIT_CHARGERS;
+            	autoState = RAMP_READY;
             	Serial.println(autoState);
           	}
+
+				/* Ramp is ready for exchange to begin */
           	if(currState == 0xC8) {
-            	autoState = INIT_CHARGERS;
+            	autoState = RAMP_READY;
             	Serial.println(autoState);
           	}
-        	}
+
+				/* Could have more cases for when things go wrong...*/
         	break;
-        
+    
       	case INIT_CHARGERS:
-			{
 				autoState = CHECK_BATTERIES;
-      	}
       	break;
 
       	case RAMP_READY:
-        	{
-         	Serial.println(autoState);
+          	Serial.println(autoState);
           	digitalWrite(READY_PIN, HIGH);
-          	while ((currState == 0xC4 | currState == 0xC8) & autoState == RAMP_READY)
-          	{
+				// Should send signal to Van to let know that Ramp is ready...
+				Serial1.write(0x01);
+          	currState = checkInputs();
+          	while ((currState == 0xC4 || currState == 0xC8) && autoState == RAMP_READY) {
             	currState = checkInputs();
             	checkSerial();
           	}
-          	digitalWrite(READY_PIN, LOW);
-         	if (autoState != START_EXCHANGE)
-          	{
+
+				/* NEED TO DETERMINE MORE LOGIC.... */
+          	//Should send signal to van to let know that 
+         	if (autoState != START_EXCHANGE) {
             	autoState = INIT;
           	}
-        	}
         	break;
 
-      	case START_EXCHANGE:
-        	{
+			case START_EXCHANGE:
+          	digitalWrite(READY_PIN, LOW);
           	chargersOff();
-          	autoState = RAISE_LIFT;
-        	}
+           	autoState = RAISE_LIFT;
         	break;
 
       	case MOVE_BAT_TO_CHARGER:
-        	{
           	if (packInFrontCart) {
             	movRev();
+					packInFrontCart = false;
+					packInBackCart = true;
             	autoState = RAISE_LIFT;
           	}
           	else if (packInBackCart) {
             	movFwd();
+					packInBackCart = false;
+					packInFrontCart = true;
             	autoState = RAISE_LIFT;
           	}
           	else {
             	error();
           	}
-        	}
         	break;
 
       	case POSITION_PACK:
-        	{
-          	if (packInFrontCart) {
-            	movFwd();
+          	if(packInFrontCart) {
+					if(digitalRead(cartAtBack) == LOW) {	//At back, move Fwd
+						movFwd();
+					}
+					else if(digitalRead(cartAtFront) == HIGH) { //Not @ either ends
+						error();
+					}
             	fwdChargerOn();
-            	autoState = RAMP_READY;
+					autoState = WAIT_FOR_VAN;
           	}  
-          	else if (packInBackCart) {
-            	movRev();
+          	else if(packInBackCart) {
+					if(digitalRead(cartAtFront == LOW) {	//At front, move Rev
+						movRev();
+					}
+					else if(digitalRead(cartAtBack) == HIGH) { //Not @ either ends
+						error();
+					}
             	backChargerOn();
-            	autoState = RAMP_READY;
+					autoState = WAIT_FOR_VAN;
           	}
           	else {
             	error();
           	}
-        	}
         	break;
 
       	case RAISE_LIFT:
-        	{
-          	raiseLift();
+         	raiseLift();
           	if (actuatorPosition) {
             	actuatorPosition = false;
             	autoState = ACTUATORS_OUT;
@@ -285,29 +304,29 @@ void loop() {
             	actuatorPosition = true;
             	autoState =  ACTUATORS_IN;
           	}
-        	}
         	break;
 			
       	case ACTUATORS_OUT:
-        	{
-          	Serial.println("send act. out");
+         	Serial.println("send act. out");
           	if (sendMessage(0x06) == 0x02) {
             	Serial.println("act going out");
-            	while (Serial1.available() == 0);
+            	while (Serial1.available() == 0) {
+						//SHOULD CHECK TO MAKE SURE THAT NOTHING GOES WRONG
+						// WHILE TAKING OUT ACTUATORS (LIFT DROPS, ACTUATORS 
+						// NOT GOING OUT, ETC...
+					}
             	if (Serial1.read() == 0x06) {
               		autoState = LOWER_LIFT;
               		Serial.println("Act out");
             	}
             	else {
               		autoState = ACTUATORS_OUT;
-            	}
+           	 	}
           	}
-        	}
         	break;
 
       	case LOWER_LIFT:
-        	{
-          	lowerLift();
+         	lowerLift();
           	if (!exchangeDone) {
             	exchangeDone = true;
             	autoState = MOVE_BAT_TO_CHARGER;
@@ -316,13 +335,11 @@ void loop() {
             	exchangeDone = false;
             	autoState = COMPLETE;
           	}
-        	}
         	break;
 
       	case ACTUATORS_IN:
-        	{
-          	if (sendMessage(0x08) == 0x02) {
-            	Serial.println("act going out");
+         	if (sendMessage(0x08) == 0x02) {
+            	Serial.println("act going in");
             	while (Serial1.available() == 0);
             	if (Serial1.read() == 0x08) {
               		autoState = LOWER_LIFT;
@@ -331,21 +348,18 @@ void loop() {
               		autoState = ACTUATORS_IN;
             	}
           	}
-        	}
         	break;
 
       	case COMPLETE:
-        	{
-          	if (sendMessage(0x09) == 0x02) {
+         	if (sendMessage(0x09) == 0x02) {
             	autoState = INIT;
+            	exchangeDone = true; // Not sure if this is needed...
             	Serial1.flush();
           	}
-        	}
         	break;
 
       	case CHECK_BATTERIES:
-        	/*{
-          	if (!frontChecked && (digitalRead(cartAtFront) == LOW)) { // Carts at Front
+        		/*if (!frontChecked && (digitalRead(cartAtFront) == LOW)) { // Carts at Front
             	Serial.println("Cart Forward");
             	frontBatteryVoltage = analogRead(frontBatteryCheck);
             	frontChecked = true;
@@ -384,28 +398,34 @@ void loop() {
               		Serial.println("BattCheckError");
               		error();
             	}
-          	}
-
-        	}*/
-		  	frontChecked = true;
-		  	backChecked = true;
-		  	if(digitalRead(cartAtFront) == LOW) {
-				Serial.println("cart at front");
-			  	packInFrontCart = true;
-			  	packInBackCart = false;
-           	autoState = POSITION_PACK;
-		  	}
-		  	else if(digitalRead(cartAtBack) == LOW) {
-				Serial.println("cart at back");
-			  	packInBackCart = true;
-			  	packInFrontCart = false;
-           	autoState = POSITION_PACK;
-		  	}
-		  	else {
-			  	Serial.println("No end stop pushed. FAILURE MODE!");
-			  	error();
-		  	}
+				}*/
+		  	  	frontChecked = true;
+		    	backChecked = true;
+		  	  	if(digitalRead(cartAtFront) == LOW) {
+					Serial.println("cart at front");
+			  	  	packInFrontCart = true;
+			  	  	packInBackCart = false;
+           		autoState = POSITION_PACK;
+		  	  	}
+		  	  	else if(digitalRead(cartAtBack) == LOW) {
+					Serial.println("cart at back");
+			  	  	packInBackCart = true;
+			  	  	packInFrontCart = false;
+           		autoState = POSITION_PACK;
+		  	  	}
+		  	  	else {
+			  		Serial.println("No end stop pushed. FAILURE MODE!");
+			  	  	error();
+		  	  	}
         	break;
+			
+			case WAIT_FOR_VAN: 
+				currState = checkInputs();
+				while(currState != 0xC4 && currState != 0xC8) {
+					currState = checkInputs();
+				}
+				autoState = RAMP_READY;
+			break;
 
     	}
   	}
@@ -440,14 +460,17 @@ void raiseLift() {
 	Serial.println("raise lift");
   	if (sendMessage(0x04) == 0x03) {
 		Serial.println("going up");
-   	Serial1.flush();
-    	digitalWrite(moveLiftDown, LOW);
+  		Serial1.flush();
+      digitalWrite(moveLiftDown, LOW);
     	digitalWrite(moveLiftUp, HIGH);
-    	while (Serial1.available() == 0);
+    	while (Serial1.available() == 0) {
+			// SHOULD ADD LOGIC HERE IN CASE LIFT CRASHES OR INPUTS CHANGE
+			// OR IF LIFT DOESN'T WORK AND LIFT_DOWN = T STILL...
+		}
     	digitalWrite(moveLiftUp, LOW);
    	Serial.println("stop");
     	if (Serial1.read() != 0x05) {
-      	Serial.println("keep going");
+     		Serial.println("keep going");
       	raiseLift();
     	}
   	}
@@ -465,12 +488,12 @@ void lowerLift() {
 
 void movUp() {
 	digitalWrite(moveLiftDown, LOW);
-  	digitalWrite(moveLiftUp, HIGH);
+  digitalWrite(moveLiftUp, HIGH);
 }
 
 void stopLift() {
 	digitalWrite(moveLiftDown, LOW);
-  	digitalWrite(moveLiftUp, LOW);
+	digitalWrite(moveLiftUp, LOW);
 }
 
 void movDown() {
@@ -489,9 +512,9 @@ void backChargerOn() {
 }
 
 void chargersOff() {
-	digitalWrite(rearChargerSelect, LOW);
-  	digitalWrite(frontChargerSelect, LOW);
-  	digitalWrite(energiseCharger, LOW);
+  digitalWrite(rearChargerSelect, LOW);
+  digitalWrite(frontChargerSelect, LOW);
+  digitalWrite(energiseCharger, LOW);
 }
 //bool checkForBattery(bool frontStation){
 //
@@ -520,7 +543,6 @@ void chargersOff() {
 //  }
 
 void error() {
-		Serial1.write(ERROR_SIGNAL);
     	digitalWrite(moveCartFwd, LOW);
     	digitalWrite(moveCartBack, LOW);
     	digitalWrite(motorOn, LOW);
@@ -529,6 +551,7 @@ void error() {
     	digitalWrite(ERROR_PIN, HIGH);
     	Serial.println("ERROR");
     	Serial.println(currState);
+      Serial1.write(ERROR_SIGNAL);
       while(1) {
           
   		}
@@ -567,6 +590,6 @@ void checkSerial() {
 }
 
 void StopISR() {
-	Serial.println("Emergency Stop Button Pressed!");
-  	error();
+  Serial.println("Emergency Stop Button Pressed!");
+  error();
 }
