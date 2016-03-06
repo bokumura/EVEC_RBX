@@ -129,32 +129,45 @@ uint8_t checkInputs() {
    return tempState;
 }
 enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, RAMP_READY, ALL_READY, STOP, START, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
-volatile State autoState = INIT;
+//volatile State autoState = INIT;
+State autoState = INIT;
 void loop() {
   while(autoState != STOP) {
-    checkSerial();
+    //checkSerial();
     	switch(autoState) {
         case INIT: {
+          Serial.println("VAN_INIT: ");
           currState = checkInputs();
-        	Serial.println("TEMPState: ");
-        	Serial.println(currState);
+          checkSerial();
+        	Serial.print("currState: ");
+        	Serial.println(currState, HEX);
+          if(digitalRead(LIFT_UP_PIN) == LOW) {
+            Serial.println("LIFT_UP! ERROR!");
+            Serial1.write(ERROR_SIGNAL);
+            error();
+          }
         	if(currState == 0x04) {		//Actuators engaged
+            Serial.println("All good. Going to WAIT.");
             autoState = WAIT;
         	}
 				  else {
+            Serial.println("Actuators Not engaged. ERROR!");
             Serial1.write(ERROR_SIGNAL);
 					  error();
 				  }
       }
       break;
-			case WAIT_FOR_DRIVER: 
+			case WAIT_FOR_DRIVER:
         EIFR = 0x01;
-        checkSerial();
+        Serial.println("VAN_WAIT_FOR_DRIVER: "); 
+        while(autoState == WAIT_FOR_DRIVER) {
+          checkSerial();
+        }
 				// Just want to wait for ISR to engage.
 			break;
 
 			case VAN_READY: {
-				Serial.println("IN VAN_READY!");
+        Serial.println("VAN_READY: ");
 				if(sendMessage(0x01) == 0x03) {
 					autoState = EXCHANGE;
          Serial.println("SETTING AUTOSTATE TO EXCHANGE!");
@@ -167,11 +180,11 @@ void loop() {
       break;
 
       	case START: {
-        		Serial.println(autoState);
+            Serial.println("VAN_START: ");
         		digitalWrite(READY_PIN, LOW);
         		uint8_t response = sendMessage(0x01);
         		if(response == 0x03) {
-         		autoState = EXCHANGE; 
+         		  autoState = EXCHANGE; 
         		}
         		else if(response == 0x02) {
           		autoState = VAN_READY;
@@ -180,21 +193,33 @@ void loop() {
       	break;
       
 			case EXCHANGE: {
-            Serial.println("IN EXCHANGE!!!");
+            Serial.println("VAN_EXCHANGE");
+            digitalWrite(COMPLETE_LED_PIN, LOW);
 				    digitalWrite(READY_PIN, LOW);
         		digitalWrite(EXCHANGE_PIN, HIGH);
             Serial.println("SET EXCHANGE PIN AND SET READY PIN LOW");
-        		while(autoState == EXCHANGE) {
-          		checkSerial(); 
+            currState = checkInputs();
+        		while(autoState == EXCHANGE && currState == 0x04) {
+          		checkSerial();
+              currState = checkInputs();
         		}
       	}
       	break;
       
       	case RAISE_LIFT: {
+          Serial.println("VAN_RAISE_LIFT: ");
        		Serial.println("raise lift");
+          // Should I do checks here before sending the ok?
+          if(digitalRead(LIFT_UP_PIN) == LOW) {
+            Serial.println("LIFT Already up?! Error mode!");
+            Serial1.write(ERROR_SIGNAL);
+            error();
+          }
        		Serial1.write(0x03); 
        		Serial.println("sent ok");
-       		while(digitalRead(LIFT_UP_PIN) == HIGH);
+       		while(digitalRead(LIFT_UP_PIN) == HIGH) {
+            checkSerial();
+       		}
        		Serial1.write(0x05);
        		Serial.println("lift up");
       	 	autoState = WAIT;
@@ -202,11 +227,15 @@ void loop() {
       	break;
       
       	case WAIT: {
-       		checkSerial(); 
+          Serial.println("VAN_WAIT: ");
+          while(autoState == WAIT) {
+       		  checkSerial(); 
+          }
       	}
       	break;
       
       	case ACTUATORS_OUT: {
+            Serial.println("VAN_ACTUATORS_OUT: ");
         		Serial.println("out");
         		actuatorsOut();
         		autoState = WAIT;
@@ -214,18 +243,19 @@ void loop() {
       	break;
       
       	case ACTUATORS_IN: {
+            Serial.println("VAN_ACTUATORS_IN: ");
         		Serial.println("in");
         		actuatorsIn();
         		autoState = WAIT;
+            //autoState = COMPLETE;
       	}
       	break;
       
       	case COMPLETE: {
+          Serial.println("VAN_COMPLETE: ");
        		Serial1.write(0x02);
        		digitalWrite(EXCHANGE_PIN,LOW);
        		digitalWrite(COMPLETE_LED_PIN, HIGH);
-       		delay(5000);
-       		digitalWrite(COMPLETE_LED_PIN, LOW);
        		autoState = INIT;
        		Serial1.flush();
       	}
@@ -254,7 +284,9 @@ void actuatorsOut() {
   	digitalWrite(movActuatorsEngage, LOW);
   	digitalWrite(movActuatorsDisengage, HIGH);
   	while(!((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
-    && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD)));
+    && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))) {
+      checkSerial();
+    }
   	digitalWrite(movActuatorsDisengage, LOW); 
   	Serial1.write(0x06); 
 }
@@ -272,11 +304,15 @@ void actuatorsIn() {
 }
 
 void error() {
-	while (1) {
-		Serial.println("Van ERROR. Power down. ");
-		stopActuators();
+    Serial.println("Van ERROR. Power down. ");
+	  stopActuators();
 		digitalWrite(ERROR_PIN, HIGH);
-	}
+    digitalWrite(COMPLETE_LED_PIN, LOW);
+    digitalWrite(READY_PIN, LOW);
+    digitalWrite(EXCHANGE_PIN, LOW);
+    while (1) {
+      
+	  }
 }
 
 uint8_t sendMessage(uint8_t message) {
@@ -316,6 +352,8 @@ void checkSerial() {
         if(autoState == WAIT_FOR_DRIVER) {
           autoState = WAIT;
           digitalWrite(READY_PIN, LOW);
+          digitalWrite(COMPLETE_LED_PIN, LOW);
+          digitalWrite(EXCHANGE_PIN, LOW);
         }
       }
     	if(temp == 0x06) {
@@ -336,6 +374,7 @@ void StartISR() {
   	if((long)(micros() - last_micros) > 15*1000) {
    	if(autoState == WAIT_FOR_DRIVER) {
       	autoState = VAN_READY;
+        Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
     }
     	//Serial.println("ISR");
   	}
