@@ -154,8 +154,7 @@ void loop() {
   prevState = currState;
   currState = checkInputs();
   Serial.print("State: ");
-  Serial.println(currState);
-  Serial1.print(currState);
+  Serial.println(currState, HEX);
   delay(100);
   if (Serial1.available() > 0){
     uint16_t incoming = Serial1.read() << 8;

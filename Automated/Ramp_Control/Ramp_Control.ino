@@ -163,6 +163,19 @@ uint16_t checkInputs() {
   	tempState |= (!digitalRead(vanTireSw)) << VAN_TIRE_SW;
   	return tempState;
 }
+
+uint16_t manInputs(){
+  uint8_t tempState = 0x00;
+  tempState |= (!digitalRead(manCartFwd)) << FWD_IN_OFFSET;
+  tempState |= (!digitalRead(manCartBack)) << BACK_IN_OFFSET;
+  tempState |= (!digitalRead(cartAtFront)) << FWD_STOP_IN;
+  tempState |= (!digitalRead(cartAtBack)) << BACK_STOP_IN;  
+  tempState |= (!digitalRead(manLiftUp)) << UP_IN_OFFSET;
+  tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
+  tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
+  return tempState;
+}
+
 enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
 State autoState = INIT;
 bool actuatorPosition = true;
@@ -178,6 +191,7 @@ int backBatteryVoltage = 0;
 /* Variables to hold the current and previous states */
 uint16_t prevState = 0x0000;
 uint16_t currState = 0x0000;
+uint16_t manState = 0x0000;
 
 void loop() {
 	while (autoState != STOP) {
@@ -493,7 +507,76 @@ void loop() {
 		  break;
 
     	}
-  	}
+	  }
+}
+
+void manControl() {
+   while(1) {
+    // Manual mode!!! 
+    manState = manInputs();
+    Serial.print("Manual State: ");
+    Serial.println(manState, HEX);
+    switch(manState) {
+      /* Lift not all the way down and not moving lift. */
+      case 0x01:
+      case 0x02:
+      case 0x04:
+      case 0x05:
+      case 0x06:
+      case 0x08:
+      case 0x09:
+      case 0x0A:
+      break;
+
+      case 0x40: //lift is down, not moving
+      case 0x44: //fwd end on, down on, not moving
+      case 0x48: //back end on, down on, not moving
+        stopCarts();
+        stopLift();
+      break;
+
+      case 0x41: //Move fwd switch is on
+      case 0x49: //Move fwd, back end is on
+        movFwd();
+      break;
+
+      case 0x45: //move fwd, but fwd end is on
+      case 0x4A: //move backward, but back end is on
+        stopCarts();
+      break;
+
+      case 0x42: //move backward switch is on
+      case 0x46: //move backward, fwd end is on
+        movRev();
+      break;
+
+      case 0x14: //Manual raise lift is on, carts in front
+      case 0x18: //manual raise lift is on, carts in back
+      case 0x54: //Manual raise lift is on, lift is at bottom, carts in front.
+      case 0x58: //Manual raise lift is on, lift is at bottom, carts in back.
+        movUp();
+        while(digitalRead(manLiftUp) == LOW);
+        stopLift();
+      break;
+
+      case 0x24: //Move down switch is on, lift is not at bottom, carts in front.
+      case 0x28: //Move down switch is on, lift is not at bottom, carts in back.
+        movDown();
+        while((digitalRead(manLiftDown) == LOW) && digitalRead(liftAtBottom) == HIGH) {
+          stopLift();
+        }
+        break;
+
+        case 0x64: //Move down, but down endstop is on, carts are in front.
+        case 0x68: //Move down, but down endstop is on, carts in back
+          stopLift();
+        break;
+
+        default: //LOL GG Done messed up
+          error();
+        break;
+      }
+    }
 }
 
 void movFwd() {
@@ -531,9 +614,9 @@ void raiseLift() {
     	while (Serial1.available() == 0) {
 			// SHOULD ADD LOGIC HERE IN CASE LIFT CRASHES OR INPUTS CHANGE
 			// OR IF LIFT DOESN'T WORK AND LIFT_DOWN = T STILL...
-		}
+		  }
     	digitalWrite(moveLiftUp, LOW);
-   	Serial.println("stop");
+   	  Serial.println("stop");
     	if (Serial1.read() != 0x05) {
      		Serial.println("keep going");
       	raiseLift();
@@ -616,9 +699,7 @@ void error() {
       digitalWrite(READY_PIN, LOW);
     	Serial.println("ERROR");
     	Serial.println(currState, HEX);
-      while(1) {
-          
-  		}
+		  manControl();
 }
 uint8_t sendMessage(uint8_t message) {
 	bool response = false;

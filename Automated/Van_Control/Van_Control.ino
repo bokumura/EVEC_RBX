@@ -68,6 +68,7 @@ const int movActuatorsDisengage = 12;  //D6 = Digital pin 12
 
 //Current State
 uint16_t currState = 0x00;
+uint16_t manState = 0x0000;
 bool rampReady = false;
 
 void setup() {
@@ -121,13 +122,23 @@ uint8_t checkInputs() {
   	tempState |= ((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
     && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
     << ACTUATORS_DISENGAGED_OFFSET;
-    
-	  //Serial.print("Front Acctuator: ");
-   //Serial.println(analogRead(frontActuatorLocationPin));
-   //Serial.print("Back Acctuator: ");
-   //Serial.println(analogRead(rearActuatorLocationPin));
    return tempState;
 }
+
+uint8_t manInputs() {
+  uint8_t tempState = 0x00;
+  tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
+  tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
+  
+  tempState |= ((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
+    && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))
+    << ACTUATORS_ENGAGED_OFFSET;
+  tempState |= ((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
+    && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
+    << ACTUATORS_DISENGAGED_OFFSET;
+  return tempState;
+}
+
 enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, RAMP_READY, ALL_READY, STOP, START, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
 //volatile State autoState = INIT;
 State autoState = INIT;
@@ -264,6 +275,37 @@ void loop() {
   	}
 }
 
+void manControl() {
+  while(1) {
+    manState = manInputs();
+    Serial.print("VAN_MANUAL State: ");
+    Serial.println(manState, HEX);
+    switch(manState) {
+      case 0x00: //Everything is off
+      case 0x04: //Actuators engaged, not moving
+      case 0x05: //Trying to engage actuators, but they are already engaged.
+      case 0x08: //Actuators disengaged, not moving.
+      case 0x0A: //Trying to disengage actuators, but they are already disengaged.
+        stopActuators();
+      break;
+
+      case 0x01: //Engaging actuators, currently neither engaged nor disengaged.
+      case 0x09: //Engaging actuators, currently disengaged.
+        engageActuators();
+      break;
+
+      case 0x02: //Disengaging actuators, currently neither engaged nor disengaged.
+      case 0x06: //Disengaging actuators, currently engaged.
+        disengageActuators();
+      break;
+
+      default: //LOL GG DONE MESSED UP SON
+        error();
+      break;
+    }
+  }
+}
+
 void stopActuators() {
 	digitalWrite(movActuatorsEngage, LOW);
   	digitalWrite(movActuatorsDisengage, LOW);
@@ -310,9 +352,7 @@ void error() {
     digitalWrite(COMPLETE_LED_PIN, LOW);
     digitalWrite(READY_PIN, LOW);
     digitalWrite(EXCHANGE_PIN, LOW);
-    while (1) {
-      
-	  }
+    manControl();
 }
 
 uint8_t sendMessage(uint8_t message) {
