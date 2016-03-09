@@ -24,6 +24,13 @@ OTHER OUTPUTS:
 
 /* Serial signal for ERROR! */
 const int ERROR_SIGNAL = 0xFF;
+const int ACK = 0x02;
+
+/* If signal not received within this time limit, 
+ *  signal is lost.
+ */
+ /* Added 3/9 */
+const int LOST_SIGNAL = 1000;
 
 volatile unsigned long last_micros;
 //Offsets of signals in curState
@@ -70,6 +77,7 @@ const int movActuatorsDisengage = 12;  //D6 = Digital pin 12
 uint16_t currState = 0x00;
 uint16_t manState = 0x0000;
 bool rampReady = false;
+bool actsIn = true;
 
 void setup() {
     Serial.begin(115200);
@@ -219,6 +227,27 @@ void loop() {
       
       	case RAISE_LIFT: {
           Serial.println("VAN_RAISE_LIFT: ");
+          currState = checkInputs();
+          if(actsIn) {
+            if(currState != 0x04) {
+              Serial.println("Actuators not in! Error!");
+              Serial1.write(ERROR_SIGNAL);
+              error();
+            }
+            else {
+              actsIn = false;
+            }
+          }
+          else {
+            if(currState != 0x08) {
+              Serial.println("Actuators not all the way out! Error");
+              Serial1.write(ERROR_SIGNAL);
+              error();
+            }
+            else {
+              actsIn = true;
+            }
+          }
        		Serial.println("raise lift");
           // Should I do checks here before sending the ok?
           if(digitalRead(LIFT_UP_PIN) == LOW) {
@@ -358,15 +387,25 @@ void error() {
 uint8_t sendMessage(uint8_t message) {
 	bool response = false;
   	uint8_t packate = 0x00;
- 
   	Serial1.write(message);
   	int startTime = millis();
+    /* Added 3/9 */
+    int endTime = millis();
   	while(!response) {
-   	if(Serial1.available() > 0) {
+   	  if(Serial1.available() > 0) {
       	response = true;
       	packate = Serial1.read();
       	Serial.println(packate); 
     	}
+      /* Added 3/9 */
+      /* else if((endTime - startTime) > LOST_SIGNAL) {
+        response = true;
+        packate = ERROR_SIGNAL;
+      }*/
+      /* Added 3/9. Is this a good thing to add?? */
+      /* else {
+        Serial1.write(message);
+      }*/
   	}
   	return packate;
 }
@@ -375,6 +414,8 @@ void checkSerial() {
 	uint8_t temp = 0x00;
   	while(Serial1.available() > 0) {
 		temp = Serial1.read();
+    Serial.print("checkSerial: temp is: ");
+    Serial.println(temp, HEX);
 	 	  if(temp == ERROR_SIGNAL) {
 			  autoState = STOP;
 		 	  error();
@@ -382,6 +423,7 @@ void checkSerial() {
     	if(temp == 0x01) {
      		rampReady = true;
         digitalWrite(READY_PIN, HIGH);
+        Serial1.write(ACK);
 			  autoState = WAIT_FOR_DRIVER;
     	}
     	if(temp == 0x04) {
@@ -412,11 +454,15 @@ void checkSerial() {
 void StartISR() {
 	//noInterrupts();
   	if((long)(micros() - last_micros) > 15*1000) {
-   	if(autoState == WAIT_FOR_DRIVER) {
+   	  if(autoState == WAIT_FOR_DRIVER) {
       	autoState = VAN_READY;
         Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
-    }
-    	//Serial.println("ISR");
+      }
+    	else {
+        Serial.print("IN ISR! AutoState = ");
+        Serial.println(autoState);
+    	}
+     
   	}
   	last_micros = micros();
 }
