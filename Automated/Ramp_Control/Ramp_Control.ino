@@ -86,12 +86,19 @@ const int BATTERY_VOLTAGE_MIN_DIFFERENCE = 2;
 typedef enum {FRONT, BACK} batteryLocation;
 
 /* variables for debouncing buttons/switches */
-int counter = 0; // how many times we have seen new value
-int reading;    // current value read from the input pin
-int current_state = HIGH; // the debounced input value. (not pressed == HIGH).
+/* TIRE BUTTON DEBOUNCE VARIABLES */
+int tire_counter = 0; // how many times we have seen new value
+int tire_reading;    // current value read from the input pin
+int tire_current_state = HIGH; // the debounced input value. (not pressed == HIGH).
+long tire_time = 0;  // the last time the output pin was sampled.
 
-long time = 0;  // the last time the output pin was sampled.
-long debounce_count = 10;   // number of millis/samples to consider before declaring a debounced input.
+/* MAN LIFT DOWN DEBOUNCE VARIABLES */
+int man_lift_down_counter = 0; // how many times we have seen new value
+int man_lift_down_reading;    // current value read from the input pin
+int man_lift_down_current_state = HIGH; // the debounced input value. (not pressed == HIGH).
+long man_lift_down_time = 0;  // the last time the output pin was sampled.
+
+const int DEBOUNCE_COUNT = 10;   // number of millis/samples to consider before declaring a debounced input.
 
 void setup() {
     Serial.begin(115200);
@@ -178,37 +185,58 @@ uint16_t checkInputs() {
 uint16_t manInputs(){
   uint8_t tempState = 0x00;
 
+  //bool manLiftDown = debounceManLiftDown():
+  
   tempState |= (!digitalRead(manCartFwd)) << FWD_IN_OFFSET;
   tempState |= (!digitalRead(manCartBack)) << BACK_IN_OFFSET;
   tempState |= (!digitalRead(cartAtFront)) << FWD_STOP_IN;
   tempState |= (!digitalRead(cartAtBack)) << BACK_STOP_IN;  
   tempState |= (!digitalRead(manLiftUp)) << UP_IN_OFFSET;
+  //tempState |= (!manLiftDown) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
   return tempState;
 }
 
 bool debounceTireSwitch() {
-  if(millis() != time) {
-    reading = digitalRead(vanTireSw);
-    if(reading == current_state && counter > 0) {
-      counter--;
+  if(millis() != tire_time) {
+    tire_reading = digitalRead(vanTireSw);
+    if(tire_reading == tire_current_state && tire_counter > 0) {
+      tire_counter--;
     }
-    if(reading != current_state) {
-      counter++;
+    if(tire_reading != tire_current_state) {
+      tire_counter++;
     }
 
     // If the input has shown the same value for long enough, let's switch it
-    if(counter >= debounce_count) {
-      counter = 0;
-      current_state = reading;
+    if(tire_counter >= DEBOUNCE_COUNT) {
+      tire_counter = 0;
+      tire_current_state = tire_reading;
     }
-    time = millis();
+    tire_time = millis();
   }
-  return current_state; 
+  return tire_current_state; 
 }
 
+bool debounceManLiftDown() {
+  if(millis() != man_lift_down_time) {
+    man_lift_down_reading = digitalRead(manLiftDown);
+    if(man_lift_down_reading == man_lift_down_current_state && man_lift_down_counter > 0) {
+      man_lift_down_counter--;
+    }
+    if(man_lift_down_reading != man_lift_down_current_state) {
+      man_lift_down_counter++;
+    }
 
+    // If the input has shown the same value for long enough, let's switch it
+    if(man_lift_down_counter >= DEBOUNCE_COUNT) {
+      man_lift_down_counter = 0;
+      man_lift_down_current_state = man_lift_down_reading;
+    }
+    man_lift_down_time = millis();
+  }
+  return man_lift_down_current_state; 
+}
 
 enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
 State autoState = INIT;
@@ -570,6 +598,7 @@ void manControl() {
     manState = manInputs();
     Serial.print("Manual State: ");
     Serial.println(manState, HEX);
+    digitalWrite(motorOn, HIGH);
     switch(manState) {
       /* Lift not all the way down and not moving lift. */
       case 0x01:
@@ -616,9 +645,8 @@ void manControl() {
       case 0x24: //Move down switch is on, lift is not at bottom, carts in front.
       case 0x28: //Move down switch is on, lift is not at bottom, carts in back.
         movDown();
-        while((digitalRead(manLiftDown) == LOW) && digitalRead(liftAtBottom) == HIGH) {
-          stopLift();
-        }
+        while((digitalRead(manLiftDown) == LOW) && digitalRead(liftAtBottom) == HIGH);
+        stopLift();
         break;
 
         case 0x64: //Move down, but down endstop is on, carts are in front.
@@ -634,7 +662,7 @@ void manControl() {
 }
 
 void movFwd() {
-  digitalWrite(motorOn, HIGH);
+    digitalWrite(motorOn, HIGH);
     delay(500);
     digitalWrite(moveCartFwd, HIGH);
     delay(500);
