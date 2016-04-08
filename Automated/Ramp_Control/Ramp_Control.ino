@@ -237,6 +237,8 @@ bool debounceManLiftDown() {
   }
   return man_lift_down_current_state; 
 }
+enum ErrorState { NONE, EMERGENCY_BUTTON, LIFT_UP, INIT_ERROR, READY_ERROR, PACK_NOT_AT_EITHER_SIDE, WAIT_FOR_VAN_ERROR, VAN_ERROR};
+ErrorState errState = NONE;
 
 enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
 State autoState = INIT;
@@ -273,6 +275,8 @@ void loop() {
           if(digitalRead(emergencyStop) == LOW) {
             Serial.println("Emergency Stop Button Pressed. ERROR!");
             Serial1.write(ERROR_SIGNAL);
+            // Set something here for what kind of error...
+            errState = EMERGENCY_BUTTON;
             error();
           }
         
@@ -301,17 +305,24 @@ void loop() {
           else if(digitalRead(liftAtBottom) == HIGH) {
             Serial.println("LIFT UP!!");
             Serial1.write(ERROR_SIGNAL);
+            errState = LIFT_UP;
+            error();
+          }
+
+          else if(currState == 0x02 || currState == 0x03) {
+            Serial.println("Pack not in Back Cart or in Front Cart!!");
+            Serial1.write(ERROR_SIGNAL);
+            errState = PACK_NOT_AT_EITHER_SIDE;
             error();
           }
           /* Could have more cases for when things go wrong...*/
           else {
-            while(1) { 
               Serial.println("Error in INIT!");
               Serial.print("CurrState = ");
               Serial.println(currState, HEX);
-            }
-            Serial1.write(ERROR_SIGNAL);
-            error();
+              Serial1.write(ERROR_SIGNAL);
+              errState = INIT_ERROR;
+              error();
           }
         break;
     
@@ -359,6 +370,7 @@ void loop() {
             Serial.print("Error occurred. Inputs changed! CurrState = ");
             Serial.println(currState, HEX);
             Serial1.write(ERROR_SIGNAL);
+            errState = READY_ERROR;
             error();
           }
           
@@ -388,6 +400,7 @@ void loop() {
           else {
             Serial.println("Pack not in Back Cart or in Front Cart!!");
             Serial1.write(ERROR_SIGNAL);
+            errState = PACK_NOT_AT_EITHER_SIDE;
             error();
           }
         break;
@@ -399,6 +412,8 @@ void loop() {
               movFwd();
             }
             else if(digitalRead(cartAtFront) == HIGH) { //Not @ either ends
+              Serial1.write(ERROR_SIGNAL);
+              errState = PACK_NOT_AT_EITHER_SIDE;
               error();
             }
             fwdChargerOn();
@@ -409,12 +424,16 @@ void loop() {
               movRev();
             }
             else if(digitalRead(cartAtBack) == HIGH) { //Not @ either ends
+              Serial1.write(ERROR_SIGNAL);
+              errState = PACK_NOT_AT_EITHER_SIDE;
               error();
             }
             backChargerOn();
             autoState = WAIT_FOR_VAN;
           }
           else {
+            Serial1.write(ERROR_SIGNAL);
+            errState = PACK_NOT_AT_EITHER_SIDE;
             error();
           }
         break;
@@ -549,6 +568,7 @@ void loop() {
         else {
           Serial.println("No end stop pushed. [OR NO BATTERIES] FAILURE MODE!");
           Serial1.write(ERROR_SIGNAL);
+          errState = PACK_NOT_AT_EITHER_SIDE;
           error();
         }
       break;
@@ -568,11 +588,13 @@ void loop() {
           if(digitalRead(liftAtBottom) == HIGH) {
             Serial.println("LIFT UP!!");
             Serial1.write(ERROR_SIGNAL);
+            errState = LIFT_UP;
             error();
           }
           else {
             Serial.println("Something happened in WAIT_FOR_VAN. Not sure what.");
             Serial1.write(ERROR_SIGNAL);
+            errState = WAIT_FOR_VAN_ERROR;
             error();
           }
         }
@@ -588,17 +610,16 @@ void loop() {
       break;
 
       }
-      delay(5);
     } 
 }
 
 void manControl() {
+   digitalWrite(motorOn, HIGH);
    while(1) {
     // Manual mode!!! 
     manState = manInputs();
     Serial.print("Manual State: ");
     Serial.println(manState, HEX);
-    digitalWrite(motorOn, HIGH);
     switch(manState) {
       /* Lift not all the way down and not moving lift. */
       case 0x01:
@@ -614,23 +635,31 @@ void manControl() {
       case 0x40: //lift is down, not moving
       case 0x44: //fwd end on, down on, not moving
       case 0x48: //back end on, down on, not moving
-        stopCarts();
+        // Stop carts
+        digitalWrite(moveCartBack, LOW);
         stopLift();
       break;
 
       case 0x41: //Move fwd switch is on
       case 0x49: //Move fwd, back end is on
-        movFwd();
+        // Move cart fwd
+        digitalWrite(moveCartFwd, HIGH);
+        delay(500);
+        digitalWrite(moveCartFwd, LOW);
       break;
 
       case 0x45: //move fwd, but fwd end is on
       case 0x4A: //move backward, but back end is on
-        stopCarts();
+        // Stop carts
+        digitalWrite(moveCartBack, LOW);
       break;
 
       case 0x42: //move backward switch is on
       case 0x46: //move backward, fwd end is on
-        movRev();
+        // Moving cart back.
+        digitalWrite(moveCartBack, HIGH);
+        delay(500);
+        digitalWrite(moveCartBack, LOW);
       break;
 
       case 0x14: //Manual raise lift is on, carts in front
@@ -655,7 +684,7 @@ void manControl() {
         break;
 
         default: //LOL GG Done messed up
-          error();
+          //error();
         break;
       }
     }
@@ -673,7 +702,7 @@ void movFwd() {
 
 void stopCarts() {
   digitalWrite(motorOn, LOW);
-    digitalWrite(moveCartBack, LOW);
+  digitalWrite(moveCartBack, LOW);
 }
 
 void movRev() {
@@ -777,19 +806,21 @@ void error() {
       chargersOff();
       stopLift();
       stopCarts();
-      digitalWrite(ERROR_PIN, HIGH);
       digitalWrite(READY_PIN, LOW);
       Serial.println("ERROR");
       Serial.println(currState, HEX);
+      printErrorMessage();
       manControl();
 }
+
+/* Send a message to the van and recieve the message back. */
 uint8_t sendMessage(uint8_t message) {
   bool response = false;
     uint8_t packate = 0x00;
     Serial1.write(message);
     int startTime = millis();
     while (!response) {
-    if (Serial1.available() > 0) {
+      if (Serial1.available() > 0) {
         packate = Serial1.read();
         response = true;
         Serial.println(packate);
@@ -798,7 +829,118 @@ uint8_t sendMessage(uint8_t message) {
     return packate;
 }
 
+/* Prints out the error message */
+void printErrorMessage() {
+  switch(errState) {
 
+    // Blink on/off 1 time
+    case EMERGENCY_BUTTON:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 2 times
+    case LIFT_UP:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 3 times
+    case INIT_ERROR:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 4 times
+    case READY_ERROR:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 5 times
+    case PACK_NOT_AT_EITHER_SIDE:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 6 times
+    case WAIT_FOR_VAN_ERROR:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+    
+    // Blink on/off 7 times
+    case VAN_ERROR:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
+    }
+}
+
+/* Will blink the error light once */
+void blinkError() {
+  digitalWrite(ERROR_PIN, HIGH);
+  delay(500);
+  digitalWrite(ERROR_PIN, LOW);
+}
+
+/* Receives all of the signals from the van. */
 void checkSerial() {
   uint8_t temp = 0x00;
     while(Serial1.available() > 0) {
@@ -814,6 +956,7 @@ void checkSerial() {
         }
       }
       if (temp == ERROR_SIGNAL) {
+        errState = VAN_ERROR;
         error();
       }
     }
@@ -822,6 +965,7 @@ void checkSerial() {
 void StopISR() {
   Serial.println("Emergency Stop Button Pressed!");
   Serial1.write(ERROR_SIGNAL);
+  errState = EMERGENCY_BUTTON;
   error();
 }
 
