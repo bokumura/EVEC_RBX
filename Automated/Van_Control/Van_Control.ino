@@ -40,6 +40,7 @@ const int ACTUATORS_DISENGAGED_OFFSET = 3;
 const int ACTUATORS_DISENGAGED_THRESHHOLD = 35;
 const int ACTUATORS_ENGAGED_THRESHHOLD = 750;
 const int ACTUATOR_RANGE = 10;
+const int ACTUATOR_RANGE_DISENGAGED = 100;
 
 //Inputs for van
 const int manActuatorsEngage = 16;  //B2 = Digital pin 16
@@ -422,6 +423,20 @@ void error() {
   Serial.println(currState);
   Serial.print("AutoState is: ");
   Serial.println(autoState);
+
+  int front = analogRead(frontActuatorLocationPin);
+  int back = analogRead(rearActuatorLocationPin);
+  Serial.print("Front actuator pin is: ");
+  Serial.println(front);
+  Serial.print("Read actuator pin is: ");
+  Serial.println(back);
+
+  /*while(Serial1.available() == 0);
+  int message = Serial1.read();
+  Serial1.write(ACK);
+  Serial.print("Ramp currState is: ");
+  Serial.println(message);
+  */
   delay(5000);
   printErrorMessage();
   digitalWrite(ERROR_PIN, HIGH);
@@ -543,7 +558,7 @@ uint8_t sendMessage(uint8_t message) {
   bool response = false;
   uint8_t packate = 0x00;
   Serial1.write(message);
-  int currTime = millis();
+  unsigned long currTime = millis();
   while(!response) {
     if(missCount > 5){
       return ERROR_SIGNAL;

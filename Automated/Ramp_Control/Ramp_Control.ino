@@ -878,6 +878,7 @@ void error() {
       digitalWrite(READY_PIN, LOW);
       Serial.println("ERROR");
       Serial.println(currState, HEX);
+      //sendMessage(currState);
       printErrorMessage();
       digitalWrite(ERROR_PIN, HIGH);
       manControl();
@@ -890,7 +891,7 @@ uint8_t sendMessage(uint8_t message) {
   bool response = false;
   uint8_t packate = 0x00;
   Serial1.write(message);
-  int currTime = millis();
+  unsigned long currTime = millis();
   while(!response) {
     if(missCount > 5){
       return ERROR_SIGNAL;
@@ -1032,6 +1033,15 @@ void printErrorMessage() {
         blinkError();
         delay(500);
         blinkError();
+        delay(2000);
+      }
+    break;
+      
+    default:
+      for(int i = 0; i < 3; i++) {
+        digitalWrite(ERROR_PIN, HIGH);
+        delay(1000);
+        digitalWrite(ERROR_PIN, LOW);
         delay(2000);
       }
     break;
