@@ -28,7 +28,7 @@ const int ACK = 0x02;
  *  signal is lost. ADDED 3/9 */
 const int LOST_SIGNAL = 1000;
 
-volatile unsigned long last_micros = 0;
+volatile unsigned long last_micros;
 
 //Offsets of signals in curState
 const int MAN_ACTUATORS_ENGAGE_OFFSET = 0;
@@ -148,16 +148,18 @@ uint8_t manInputs() {
   return tempState;
 }
 
-enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, RAMP_READY, ALL_READY, STOP, START, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
+enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL};
+ErrorState errState = NONE;
+
+enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
 //volatile State autoState = INIT;
 State autoState = INIT;
+
 void loop() {
   while(autoState != STOP) {
-    //checkSerial();
       switch(autoState) {
         case INIT: {
           Serial.println("VAN_INIT: ");
-          //delay(5000);
           currState = checkInputs();
           checkSerial();
           Serial.print("currState: ");
@@ -165,6 +167,7 @@ void loop() {
           if(digitalRead(LIFT_UP_PIN) == LOW) {
             Serial.println("LIFT_UP! ERROR!");
             Serial1.write(ERROR_SIGNAL);
+            errState = LIFT_UP;
             error();
           }
           if(currState == 0x04) {   //Actuators engaged
@@ -174,56 +177,64 @@ void loop() {
           else {
             Serial.println("Actuators Not engaged. ERROR!");
             Serial1.write(ERROR_SIGNAL);
+            errState = ACTUATORS_DISENGAGED;
             error();
           }
-      }
-      break;
-      case WAIT_FOR_DRIVER:
-        EIFR = 0x01;
-        Serial.println("VAN_WAIT_FOR_DRIVER: "); 
-        while(autoState == WAIT_FOR_DRIVER) {
-          checkSerial();
-        }
-        // Just want to wait for ISR to engage.
-      break;
-
-      case VAN_READY: {
-        Serial.println("VAN_READY: ");
-        if(sendMessage(0x01) == 0x03) {
-          autoState = EXCHANGE;
-         Serial.println("SETTING AUTOSTATE TO EXCHANGE!");
-        }
-        else {
-          Serial.println("DIDN'T SET AUTOSTATE TO EXCHANGE!");
-        }
-        
-      }
-      break;
-
-        case START: {
-            Serial.println("VAN_START: ");
-            digitalWrite(READY_PIN, LOW);
-            uint8_t response = sendMessage(0x01);
-            if(response == 0x03) {
-              autoState = EXCHANGE; 
-            }
-            else if(response == 0x02) {
-              autoState = VAN_READY;
-            }
         }
         break;
+        case WAIT_FOR_DRIVER: {
+          EIFR = 0x01;
+          Serial.println("VAN_WAIT_FOR_DRIVER: "); 
+          while(autoState == WAIT_FOR_DRIVER) {
+            checkSerial();
+          }
+          // Just want to wait for ISR to engage.
+        }
+        break;
+
+        case VAN_READY: {
+          Serial.println("VAN_READY: ");
+          if(sendMessage(0x01) == 0x03) {
+            autoState = EXCHANGE;
+            Serial.println("SETTING AUTOSTATE TO EXCHANGE!");
+          }
+          /* Possibly missed signal? Error? */
+          else {
+            Serial.println("DIDN'T SET AUTOSTATE TO EXCHANGE!");
+            Serial1.write(ERROR_SIGNAL);
+            errState = MISSED_SIGNAL;
+            error();
+            /* SHOULD I SET ERRSTATE HERE?? */
+          }
+        }
+        break;
+
+      /*
+      case START: {
+        Serial.println("VAN_START: ");
+        digitalWrite(READY_PIN, LOW);
+        uint8_t response = sendMessage(0x01);
+        if(response == 0x03) {
+          autoState = EXCHANGE; 
+        }
+        else if(response == 0x02) {
+          autoState = VAN_READY;
+        }
+      }
+      break;
+      */
       
-      case EXCHANGE: {
-            Serial.println("VAN_EXCHANGE");
-            digitalWrite(COMPLETE_LED_PIN, LOW);
-            digitalWrite(READY_PIN, LOW);
-            digitalWrite(EXCHANGE_PIN, HIGH);
-            Serial.println("SET EXCHANGE PIN AND SET READY PIN LOW");
+        case EXCHANGE: {
+          Serial.println("VAN_EXCHANGE");
+          digitalWrite(COMPLETE_LED_PIN, LOW);
+          digitalWrite(READY_PIN, LOW);
+          digitalWrite(EXCHANGE_PIN, HIGH);
+          Serial.println("SET EXCHANGE PIN AND SET READY PIN LOW");
+          currState = checkInputs();
+          while(autoState == EXCHANGE && currState == 0x04) {
+            checkSerial();
             currState = checkInputs();
-            while(autoState == EXCHANGE && currState == 0x04) {
-              checkSerial();
-              currState = checkInputs();
-            }
+          }
         }
         break;
       
@@ -234,6 +245,7 @@ void loop() {
             if(currState != 0x04) {
               Serial.println("Actuators not in! Error!");
               Serial1.write(ERROR_SIGNAL);
+              errState = ACTUATORS_DISENGAGED;
               error();
             }
             else {
@@ -244,6 +256,7 @@ void loop() {
             if(currState != 0x08) {
               Serial.println("Actuators not all the way out! Error");
               Serial1.write(ERROR_SIGNAL);
+              errState = ACTUATORS_ENGAGED;
               error();
             }
             else {
@@ -255,16 +268,24 @@ void loop() {
           if(digitalRead(LIFT_UP_PIN) == LOW) {
             Serial.println("LIFT Already up?! Error mode!");
             Serial1.write(ERROR_SIGNAL);
+            errState = LIFT_UP;
             error();
           }
+          /* Sending acknowledge to ramp */
           Serial1.write(0x03); 
           Serial.println("sent ok");
           while(digitalRead(LIFT_UP_PIN) == HIGH) {
             checkSerial();
           }
-          Serial1.write(0x05);
-          Serial.println("lift up");
-          autoState = WAIT;
+          if(sendMessage(0x05) != ACK) {
+            Serial1.write(ERROR_SIGNAL);
+            errState = MISSED_SIGNAL;
+            error();
+          }
+          else {
+            Serial.println("lift up");
+            autoState = WAIT;
+          }
         }
         break;
       
@@ -295,7 +316,7 @@ void loop() {
       
         case COMPLETE: {
           Serial.println("VAN_COMPLETE: ");
-          Serial1.write(0x02);
+          Serial1.write(ACK);
           digitalWrite(EXCHANGE_PIN,LOW);
           digitalWrite(COMPLETE_LED_PIN, HIGH);
           autoState = INIT;
@@ -342,115 +363,226 @@ void manControl() {
 
 void stopActuators() {
   digitalWrite(movActuatorsEngage, LOW);
-    digitalWrite(movActuatorsDisengage, LOW);
+  digitalWrite(movActuatorsDisengage, LOW);
 }
 
 void engageActuators() {
   digitalWrite(movActuatorsEngage, HIGH);
-    digitalWrite(movActuatorsDisengage, LOW);
+  digitalWrite(movActuatorsDisengage, LOW);
 }
 
 void disengageActuators() {
   digitalWrite(movActuatorsEngage, LOW);
-    digitalWrite(movActuatorsDisengage, HIGH);
+  digitalWrite(movActuatorsDisengage, HIGH);
 }
 
 void actuatorsOut() {
-  Serial1.write(0x02);
-    digitalWrite(movActuatorsEngage, LOW);
-    digitalWrite(movActuatorsDisengage, HIGH);
-    while(!((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
-    && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))) {
-      checkSerial();
-    }
-    digitalWrite(movActuatorsDisengage, LOW); 
-    Serial1.write(0x06); 
+  Serial1.write(ACK);
+  digitalWrite(movActuatorsEngage, LOW);
+  digitalWrite(movActuatorsDisengage, HIGH);
+  /* Do I need to add threshold here? */
+  while(!((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
+  && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))) {
+    checkSerial();
+  }
+  digitalWrite(movActuatorsDisengage, LOW); 
+  if(sendMessage(0x06) != ACK) {
+    Serial1.write(ERROR_SIGNAL);
+    errState = MISSED_SIGNAL;
+    error();
+  }
 }
 
 void actuatorsIn() {
-    Serial1.write(0x02);
-    digitalWrite(movActuatorsDisengage, LOW);
-    digitalWrite(movActuatorsEngage, HIGH);
-    while(!((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
-    && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))) {
-      checkSerial();
-    }
-    digitalWrite(movActuatorsEngage, LOW); 
-    Serial1.write(0x08); 
+  Serial1.write(ACK);
+  digitalWrite(movActuatorsDisengage, LOW);
+  digitalWrite(movActuatorsEngage, HIGH);
+  /* Do I need to add range to this? */
+  while(!((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
+  && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))) {
+    checkSerial();
+  }
+  digitalWrite(movActuatorsEngage, LOW); 
+  if(sendMessage(0x08) != ACK) {
+    Serial1.write(ERROR_SIGNAL);
+    errState = MISSED_SIGNAL;
+    error();
+  }
 }
 
 void error() {
-    digitalWrite(ERROR_PIN, HIGH);
-    digitalWrite(COMPLETE_LED_PIN, LOW);
-    digitalWrite(READY_PIN, LOW);
-    digitalWrite(EXCHANGE_PIN, LOW);
-    stopActuators();
+  digitalWrite(COMPLETE_LED_PIN, LOW);
+  digitalWrite(READY_PIN, LOW);
+  digitalWrite(EXCHANGE_PIN, LOW);
+  stopActuators();
 
-    /* DEBUGGING! */
-    while(1) {
-      Serial.println("Van ERROR. Power down. ");  
-      Serial.print("CurrState is: ");
-      Serial.println(currState);
-      Serial.print("AutoState is: ");
-      Serial.println(autoState);
-      Serial.print("front Actuator: ");
-      int front = analogRead(frontActuatorLocationPin);
-      Serial.println(front);
-      Serial.print("rear Actuator: ");
-      int back = analogRead(rearActuatorLocationPin);
-      Serial.println(back);
-      delay(5000);
-    }
-    manControl();
+  /* DEBUGGING! */
+  Serial.println("Van ERROR. Power down. ");  
+  Serial.print("CurrState is: ");
+  Serial.println(currState);
+  Serial.print("AutoState is: ");
+  Serial.println(autoState);
+  delay(5000);
+  printErrorMessage();
+  digitalWrite(ERROR_PIN, HIGH);
+  manControl();
+}
+
+void printErrorMessage() {
+  
+  switch(errState) {
+
+    // Blink on/off 1 time
+    case LIFT_UP:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(2000);
+      }
+    break;
+
+    // Blink on/off 2 times
+    case ACTUATORS_DISENGAGED:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+    break;
+
+    // Blink on/off 3 times
+    case ACTUATORS_ENGAGED:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+    break;
+
+    // Blink on/off 4 times
+    case READY_ERROR:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+    break;
+
+    // Blink on/off 5 times
+    case WAIT_FOR_VAN_ERROR:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+    break;
+
+    // Blink on/off 6 times
+    case RAMP_ERROR:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+    break;
+
+    case MISSED_SIGNAL:
+      for(int i = 0; i < 3; i++) {
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(500);
+          blinkError();
+          delay(2000);
+      }
+  }
+}
+
+/* Will blink the error light once */
+void blinkError() {
+  digitalWrite(ERROR_PIN, HIGH);
+  delay(500);
+  digitalWrite(ERROR_PIN, LOW);
 }
 
 uint8_t sendMessage(uint8_t message) {
+  int missCount = 0;
+
   bool response = false;
-    uint8_t packate = 0x00;
-    Serial1.write(message);
-    int startTime = millis();
-    /* Added 3/9 */
-    int endTime = millis();
-    while(!response) {
-      if(Serial1.available() > 0) {
-        response = true;
-        packate = Serial1.read();
-        Serial.println(packate); 
-      }
-      /* Added 3/9 */
-      /* else if((endTime - startTime) > LOST_SIGNAL) {
-        response = true;
-        packate = ERROR_SIGNAL;
-      }*/
-      /* Added 3/9. Is this a good thing to add?? */
-      /* else {
-        Serial1.write(message);
-      }*/
+  uint8_t packate = 0x00;
+  Serial1.write(message);
+  int currTime = millis();
+  while(!response) {
+    if(missCount > 5){
+      return ERROR_SIGNAL;
     }
-    return packate;
+    if(Serial1.available() > 0) {
+      response = true;
+      packate = Serial1.read();
+      Serial.println(packate); 
+    }
+    if((millis() - currTime) > LOST_SIGNAL) {
+      /*RESEND*/
+      Serial1.write(message);
+      missCount++;
+      currTime = millis();
+      //response = true;
+      //packate = ERROR_SIGNAL;
+    }
+  }
+  return packate; 
 }
 
 void checkSerial() {
   uint8_t temp = 0x00;
     while(Serial1.available() > 0) {
-    temp = Serial1.read();
-    Serial.print("checkSerial: temp is: ");
-    Serial.println(temp, HEX);
+      temp = Serial1.read();
+      Serial.print("checkSerial: temp is: ");
+      Serial.println(temp, HEX);
       if(temp == ERROR_SIGNAL) {
         /* DEBUGGING */
         Serial.println("Received error from ramp!");
         delay(3000);
-        autoState = STOP;
+        //autoState = STOP;
+        errState = RAMP_ERROR;
         error();
       }
       if(temp == 0x01) {
         rampReady = true;
-        Serial.println("Received ready from van. ");
-        delay(1000);
         digitalWrite(READY_PIN, HIGH);
         Serial1.write(ACK);
-        Serial.println("Received ready signal from van. Sending signal to ramp.");
-        delay(1000);
         autoState = WAIT_FOR_DRIVER;
       }
       if(temp == 0x04) {

@@ -30,6 +30,11 @@ OUTPUTS:
 /* Serial signal for ERROR! */
 const int ERROR_SIGNAL = 0xFF;
 
+/* Acknowledgement signal */
+const int ACK = 0x02;
+
+const int LOST_SIGNAL = 1000;
+
 const int FWD_IN_OFFSET = 0;
 const int BACK_IN_OFFSET = 1;
 const int FWD_STOP_IN = 2;
@@ -237,7 +242,7 @@ bool debounceManLiftDown() {
   }
   return man_lift_down_current_state; 
 }
-enum ErrorState { NONE, EMERGENCY_BUTTON, LIFT_UP, INIT_ERROR, READY_ERROR, PACK_NOT_AT_EITHER_SIDE, WAIT_FOR_VAN_ERROR, VAN_ERROR};
+enum ErrorState { NONE, EMERGENCY_BUTTON, LIFT_UP, INIT_ERROR, READY_ERROR, PACK_NOT_AT_EITHER_SIDE, WAIT_FOR_VAN_ERROR, VAN_ERROR, MISSED_SIGNAL};
 ErrorState errState = NONE;
 
 enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, CHECK_BATTERIES, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
@@ -259,9 +264,8 @@ uint16_t manState = 0x0000;
 
 void loop() {
   while (autoState != STOP) {
-    //checkSerial();
       switch (autoState) {
-        case INIT:
+        case INIT: {
           actuatorPosition = true;
           exchangeDone = false;
           prevState = currState;
@@ -324,20 +328,27 @@ void loop() {
               errState = INIT_ERROR;
               error();
           }
+        }
         break;
     
-        case INIT_CHARGERS:
+        case INIT_CHARGERS: {
           Serial.println("INIT_CHARGERS: ");
           Serial.println("Going to CHECK_BATTERIES");
           autoState = CHECK_BATTERIES;
+        }
         break;
 
-        case RAMP_READY:
+        case RAMP_READY: {
           Serial.println("RAMP_READY: ");
           digitalWrite(READY_PIN, HIGH);
           // Should send signal to Van to let know that Ramp is ready...
           Serial.println("Writing to van that ramp is ready.");
-          Serial1.write(0x01);
+          //Serial1.write(0x01);
+          if(sendMessage(0x01) != ACK) {
+            Serial1.write(ERROR_SIGNAL);
+            errState = MISSED_SIGNAL;
+            error();
+          }
           currState = checkInputs();
           checkSerial();
           Serial.println("RAMP_READY: Van still on ramp, waiting for driver to hit button.");
@@ -357,7 +368,12 @@ void loop() {
             autoState = WAIT_FOR_VAN;
             Serial.println("Van drove off ramp. Going to WAIT_FOR_VAN.");
             digitalWrite(READY_PIN, LOW);
-            Serial1.write(0x05); //sending signal for van.
+            //Serial1.write(0x05); //sending signal for van.
+            if(sendMessage(0x05) != ACK) {
+              Serial1.write(ERROR_SIGNAL);
+              errState = MISSED_SIGNAL;
+              error();
+            }
           }
           
           /* NEED TO DETERMINE MORE LOGIC.... */
@@ -365,25 +381,33 @@ void loop() {
           /* else if (autoState != START_EXCHANGE) {
               autoState = INIT;
           }*/
-
           else if(currState != 0xC4 && currState != 0xC8) {
-            Serial.print("Error occurred. Inputs changed! CurrState = ");
-            Serial.println(currState, HEX);
-            Serial1.write(ERROR_SIGNAL);
-            errState = READY_ERROR;
-            error();
+            if(currState == 0xC0) {
+              Serial.println("Carts neither forward or back.");
+              Serial1.write(ERROR_SIGNAL);
+              errState = PACK_NOT_AT_EITHER_SIDE;
+              error();
+            }
+            else {
+              Serial.print("Error occurred. Inputs changed! CurrState = ");
+              Serial.println(currState, HEX);
+              Serial1.write(ERROR_SIGNAL);
+              errState = READY_ERROR;
+              error();
+            }
           }
-          
+        }
         break;
 
-        case START_EXCHANGE:
+        case START_EXCHANGE: {
           Serial.println("START_EXCHANGE: ");
           digitalWrite(READY_PIN, LOW);
           chargersOff();
           autoState = RAISE_LIFT;
+        }
         break;
 
-        case MOVE_BAT_TO_CHARGER:
+        case MOVE_BAT_TO_CHARGER: {
           Serial.println("MOVE_BAT_TO_CHARGER: ");
           if (packInFrontCart) {
             movRev();
@@ -403,9 +427,10 @@ void loop() {
             errState = PACK_NOT_AT_EITHER_SIDE;
             error();
           }
+        }
         break;
 
-        case POSITION_PACK:
+        case POSITION_PACK: {
           Serial.println("POSITION_PACK: ");
           if(packInFrontCart) {
             if(digitalRead(cartAtBack) == LOW) {  //At back, move Fwd
@@ -436,9 +461,10 @@ void loop() {
             errState = PACK_NOT_AT_EITHER_SIDE;
             error();
           }
+        }
         break;
 
-        case RAISE_LIFT:
+        case RAISE_LIFT: {
           Serial.println("RAISE_LIFT: ");
           raiseLift();
           if (actuatorPosition) {
@@ -449,12 +475,13 @@ void loop() {
             actuatorPosition = true;
             autoState =  ACTUATORS_IN;
           }
+        }
         break;
       
-        case ACTUATORS_OUT:
+        case ACTUATORS_OUT: {
           Serial.println("ACTUATORS_OUT: ");
           Serial.println("send act. out");
-          if (sendMessage(0x06) == 0x02) {
+          if (sendMessage(0x06) == ACK) {
             Serial.println("act going out");
             while (Serial1.available() == 0) {
               //SHOULD CHECK TO MAKE SURE THAT NOTHING GOES WRONG
@@ -463,15 +490,26 @@ void loop() {
             }
             if (Serial1.read() == 0x06) {
               autoState = LOWER_LIFT;
+              Serial1.write(ACK);
               Serial.println("Act out");
             }
+            /* Should this be the case? Or should I send Error_signal? */
             else {
-              autoState = ACTUATORS_OUT;
+              Serial1.write(ERROR_SIGNAL);
+              errState = MISSED_SIGNAL;
+              error();
             }
          }
+         /* Should have an else statment for if the message timed out */
+         else {
+          Serial1.write(ERROR_SIGNAL);
+          errState = MISSED_SIGNAL;
+          error();
+         }
+       }
        break;
 
-      case LOWER_LIFT:
+      case LOWER_LIFT: {
         Serial.println("LOWER_LIFT: ");
         lowerLift();
         if (!exchangeDone) {
@@ -482,34 +520,52 @@ void loop() {
           exchangeDone = false;
           autoState = COMPLETE;
         }
+      }
       break;
 
-      case ACTUATORS_IN:
+      case ACTUATORS_IN: {
         Serial.println("ACTUATORS_IN: ");
-        if (sendMessage(0x08) == 0x02) {
+        if (sendMessage(0x08) == ACK) {
           Serial.println("act going in");
           while (Serial1.available() == 0);
           if (Serial1.read() == 0x08) {
+            Serial1.write(ACK);
             autoState = LOWER_LIFT;
           }
           else {
-            autoState = ACTUATORS_IN;
+            Serial1.write(ERROR_SIGNAL);
+            errState = MISSED_SIGNAL;
+            error();
           }
         }
+        /* Will want an else statement for if signal timed out */
+        else {
+          Serial1.write(ERROR_SIGNAL);
+          errState = MISSED_SIGNAL;
+          error();
+        }
+      }
       break;
 
-      case COMPLETE:
+      case COMPLETE: {
         Serial.println("COMPLETE: ");
         // May not need to write complete since actuator_in signals that.
-        if (sendMessage(0x09) == 0x02) {
+        if (sendMessage(0x09) == ACK) {
           //Serial1.write(0x09);
           autoState = INIT;
           exchangeDone = true; // Not sure if this is needed...
           Serial1.flush();
         }
+        else {
+          Serial1.write(ERROR_SIGNAL);
+          errState = MISSED_SIGNAL;
+          error();
+        }
+        /* Need an else statement for if signal timed out */
+      }
       break;
 
-      case CHECK_BATTERIES:
+      case CHECK_BATTERIES: {
         Serial.println("CHECK_BATTERIES: ");
         /*if (!frontChecked && (digitalRead(cartAtFront) == LOW)) { // Carts at Front
             Serial.println("Cart Forward");
@@ -571,9 +627,10 @@ void loop() {
           errState = PACK_NOT_AT_EITHER_SIDE;
           error();
         }
+      }
       break;
       
-      case WAIT_FOR_VAN: 
+      case WAIT_FOR_VAN: {
         Serial.println("WAIT_FOR_VAN: ");
         currState = checkInputs();
         checkSerial();
@@ -607,6 +664,7 @@ void loop() {
         }
         
         //autoState = RAMP_READY;
+      }
       break;
 
       }
@@ -692,9 +750,9 @@ void manControl() {
 
 void movFwd() {
     digitalWrite(motorOn, HIGH);
-    delay(500);
+    delay(5000);
     digitalWrite(moveCartFwd, HIGH);
-    delay(500);
+    delay(1000);
     digitalWrite(moveCartFwd, LOW);
     while(digitalRead(cartAtFront) == HIGH);
     digitalWrite(motorOn, LOW);
@@ -707,9 +765,9 @@ void stopCarts() {
 
 void movRev() {
     digitalWrite(motorOn, HIGH);
-    delay(500);
+    delay(5000);
     digitalWrite(moveCartBack, HIGH);
-    delay(500);
+    delay(1000);
     digitalWrite(moveCartBack, LOW);
     while(digitalRead(cartAtBack) == HIGH);
     digitalWrite(motorOn, LOW);
@@ -718,7 +776,7 @@ void movRev() {
 void raiseLift() {
   Serial.println("raise lift");
     if (sendMessage(0x04) == 0x03) {
-    Serial.println("going up");
+      Serial.println("going up");
       Serial1.flush();
       digitalWrite(moveLiftDown, LOW);
       digitalWrite(moveLiftUp, HIGH);
@@ -729,15 +787,26 @@ void raiseLift() {
       digitalWrite(moveLiftUp, LOW);
       Serial.println("stop");
       if (Serial1.read() != 0x05) {
-        Serial.println("keep going");
-        raiseLift();
+        Serial1.write(ERROR_SIGNAL);
+        errState = MISSED_SIGNAL;
+        error();
+      }
+      else {
+        Serial1.write(ACK);
       }
     }
+    else {
+      Serial.println("Didn't receive signal!");
+      Serial1.write(ERROR_SIGNAL);
+      errState = MISSED_SIGNAL;
+      error();
+    }
+    /* Need an else statement for if signal timed out */
     Serial.println("done");
 }
 
 void lowerLift() {
-  Serial.println("lower lift");
+    Serial.println("lower lift");
     digitalWrite(moveLiftUp, LOW);
     digitalWrite(moveLiftDown, HIGH);
     while (digitalRead(liftAtBottom) == HIGH);
@@ -775,7 +844,7 @@ void chargersOff() {
   digitalWrite(frontChargerSelect, LOW);
   digitalWrite(energiseCharger, LOW);
 }
-//bool checkForBattery(bool frontStation){
+//bool checkForBattery(bool frontStation) {
 //
 //  bool returnValue = false;
 //  pinMode(optoIsolator, INPUT);
@@ -810,23 +879,37 @@ void error() {
       Serial.println("ERROR");
       Serial.println(currState, HEX);
       printErrorMessage();
+      digitalWrite(ERROR_PIN, HIGH);
       manControl();
 }
 
 /* Send a message to the van and recieve the message back. */
 uint8_t sendMessage(uint8_t message) {
+  int missCount = 0;
+
   bool response = false;
-    uint8_t packate = 0x00;
-    Serial1.write(message);
-    int startTime = millis();
-    while (!response) {
-      if (Serial1.available() > 0) {
-        packate = Serial1.read();
-        response = true;
-        Serial.println(packate);
-      }
+  uint8_t packate = 0x00;
+  Serial1.write(message);
+  int currTime = millis();
+  while(!response) {
+    if(missCount > 5){
+      return ERROR_SIGNAL;
     }
-    return packate;
+    if(Serial1.available() > 0) {
+      response = true;
+      packate = Serial1.read();
+      Serial.println(packate); 
+    }
+    if((millis() - currTime) > LOST_SIGNAL) {
+      /*RESEND*/
+      Serial1.write(message);
+      missCount++;
+      currTime = millis();
+      //response = true;
+      //packate = ERROR_SIGNAL;
+    }
+  }
+  return packate; 
 }
 
 /* Prints out the error message */
@@ -930,6 +1013,28 @@ void printErrorMessage() {
         delay(2000);
       }
     break;
+
+    // Blink on/off 8 times
+    case MISSED_SIGNAL:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
     }
 }
 
@@ -951,9 +1056,10 @@ void checkSerial() {
             Serial1.write(0x03);
             autoState = START_EXCHANGE;
         }
+        /*
         else {
             Serial1.write(0x02);
-        }
+        }*/
       }
       if (temp == ERROR_SIGNAL) {
         errState = VAN_ERROR;
