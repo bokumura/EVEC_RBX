@@ -172,6 +172,7 @@ void setup() {
   the state to be returned (currstate). All inputs are
    active low. */
 uint16_t checkInputs() {
+  /*
   uint8_t tempState = 0x00;
     
   bool vanTire = debounceTireSwitch();
@@ -184,6 +185,19 @@ uint16_t checkInputs() {
   tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
   tempState |= (!vanTire) << VAN_TIRE_SW;
+  return tempState;
+  */
+  
+  uint8_t tempState = 0x00;
+  
+  tempState |= (!debouncePin(manCartFwd)) << FWD_IN_OFFSET;
+  tempState |= (!debouncePin(manCartBack)) << BACK_IN_OFFSET;
+  tempState |= (!debouncePin(cartAtFront)) << FWD_STOP_IN;
+  tempState |= (!debouncePin(cartAtBack)) << BACK_STOP_IN;
+  tempState |= (!debouncePin(manLiftUp)) << UP_IN_OFFSET;
+  tempState |= (!debouncePin(manLiftDown)) << DOWN_IN_OFFSET;
+  tempState |= (!debouncePin(liftAtBottom)) << DOWN_STOP_IN;
+  tempState |= (!debouncePin(vanTireSw)) << VAN_TIRE_SW;
   return tempState;
 }
 
@@ -201,6 +215,17 @@ uint16_t manInputs(){
   tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
   return tempState;
+}
+
+int debouncePin(int pin)
+{
+  int temp = digitalRead(pin);
+  delay(10);
+  int temp2 = digitalRead(pin);
+  if (temp2 == temp && temp == LOW)
+    return LOW;
+  else
+    return HIGH;
 }
 
 bool debounceTireSwitch() {
@@ -785,6 +810,10 @@ void raiseLift() {
       // OR IF LIFT DOESN'T WORK AND LIFT_DOWN = T STILL...
       }
       digitalWrite(moveLiftUp, LOW);
+      if(digitalRead(liftAtBottom == LOW))
+      {
+       error(); 
+      }
       Serial.println("stop");
       if (Serial1.read() != 0x05) {
         Serial1.write(ERROR_SIGNAL);

@@ -601,6 +601,9 @@ void checkSerial() {
         autoState = WAIT_FOR_DRIVER;
       }
       if(temp == 0x04) {
+        // if we're already in RAISE_LIFT, the ACK was missed, resend it
+        if (autoState == RAISE_LIFT)
+          Serial1.write(0x03);
         autoState = RAISE_LIFT; 
         Serial.println("state to raise");
       }
