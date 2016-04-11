@@ -287,6 +287,7 @@ uint16_t currState = 0x0000;
 uint16_t manState = 0x0000;
 
 void loop() {
+  //EIFR = 0x01;
   while (autoState != STOP) {
       switch (autoState) {
         case INIT: {
