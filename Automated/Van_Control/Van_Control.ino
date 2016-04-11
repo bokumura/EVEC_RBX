@@ -195,9 +195,14 @@ void loop() {
 
         case VAN_READY: {
           Serial.println("VAN_READY: ");
-          if(sendMessage(0x01) == 0x03) {
+          int message =  sendMessage(0x01);
+          if(message == 0x03) {
             autoState = EXCHANGE;
             Serial.println("SETTING AUTOSTATE TO EXCHANGE!");
+          }
+          else if(message == 0x04) {
+            /* Must have missed 0x03 (ACK) and ramp in raiseLift */
+            autoState = EXCHANGE; /* Just continue to go forward */
           }
           /* Possibly missed signal? Error? */
           else {
@@ -278,14 +283,23 @@ void loop() {
           while(digitalRead(LIFT_UP_PIN) == HIGH) {
             checkSerial();
           }
-          if(sendMessage(0x05) != ACK) {
+          int message = sendMessage(0x05); //0x06
+          if(message == ACK) {
+            Serial.println("lift up");
+            autoState = WAIT;
+          }
+          else if(message == 0x08) {
+            Serial.println("Missed ACK, but ramp received message. Put acts in. ");
+            autoState = WAIT;
+          }
+          else if(message == 0x06) {
+            Serial.println("Missed ACK, but ramp received message. Take acts out. ");
+            autoState = WAIT;
+          }
+          else {
             Serial1.write(ERROR_SIGNAL);
             errState = MISSED_SIGNAL;
             error();
-          }
-          else {
-            Serial.println("lift up");
-            autoState = WAIT;
           }
         }
         break;
@@ -394,8 +408,8 @@ void actuatorsOut() {
   }
 }
 
-void actuatorsIn() {
-  Serial1.write(ACK);
+void actuatorsIn() { 
+  Serial1.write(ACK); 
   digitalWrite(movActuatorsDisengage, LOW);
   digitalWrite(movActuatorsEngage, HIGH);
   /* Do I need to add range to this? */
@@ -616,9 +630,13 @@ void checkSerial() {
         }
       }
       if(temp == 0x06) {
+        if(autoState == ACTUATORS_OUT)
+          Serial1.write(ACK);
         autoState = ACTUATORS_OUT; 
       }
       if(temp == 0x08) {
+        if(autoState == ACTUATORS_IN)
+          Serial1.write(ACK);
         autoState = ACTUATORS_IN; 
       }
       if(temp == 0x09) {
