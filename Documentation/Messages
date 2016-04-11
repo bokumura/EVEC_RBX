@@ -1,0 +1,22 @@
+--------------------------------------------------------------------------------
+Van Signals (sent)
+--------------------------------------------------------------------------------
+0x01 - Driver presses start button
+0x02 - ACK
+0x03 - Allow lift to raise
+0x05 - Lift is at top
+0x06 - Actuators all the way out
+0x08 - Actuators all the way in
+0xFF - Error
+
+--------------------------------------------------------------------------------
+Ramp Signals (sent)
+--------------------------------------------------------------------------------
+0x01 - Ramp ready
+0x02 - ACK
+0x03 - Received driver ready and moving to start exchange
+0x04 - Raising lift
+0x05 - van drove off ramp -> WAIT_FOR_VAN
+0x06 - When requesting to take actuator out
+0x08 - When requesting to put actuator in
+0x09 - When transfer complete
