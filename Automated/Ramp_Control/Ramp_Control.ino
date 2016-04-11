@@ -288,6 +288,7 @@ uint16_t currState = 0x0000;
 uint16_t manState = 0x0000;
 
 void loop() {
+  //EIFR = 0x01;
   while (autoState != STOP) {
       switch (autoState) {
         case INIT: {
@@ -810,9 +811,9 @@ void raiseLift() {
       // OR IF LIFT DOESN'T WORK AND LIFT_DOWN = T STILL...
       }
       digitalWrite(moveLiftUp, LOW);
-      if(digitalRead(liftAtBottom == LOW))
+      if(digitalRead(liftAtBottom) == LOW)
       {
-       error(); 
+        error(); 
       }
       Serial.println("stop");
       if (Serial1.read() != 0x05) {
