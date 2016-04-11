@@ -79,8 +79,8 @@ bool rampReady = false;
 bool actsIn = true;
 
 void setup() {
-    Serial.begin(115200);
-    Serial1.begin(115200);
+    Serial.begin(9600);
+    Serial1.begin(9600);
     
     //Set actuator signals as inputs
     pinMode(manActuatorsEngage, INPUT);
@@ -207,6 +207,8 @@ void loop() {
           /* Possibly missed signal? Error? */
           else {
             Serial.println("DIDN'T SET AUTOSTATE TO EXCHANGE!");
+            Serial.print("Message was: ");
+            Serial.println(message, HEX);
             Serial1.write(ERROR_SIGNAL);
             errState = MISSED_SIGNAL;
             error();
@@ -574,7 +576,7 @@ uint8_t sendMessage(uint8_t message) {
   Serial1.write(message);
   unsigned long currTime = millis();
   while(!response) {
-    if(missCount > 5){
+    if(missCount > 8){
       return ERROR_SIGNAL;
     }
     if(Serial1.available() > 0) {
@@ -640,6 +642,9 @@ void checkSerial() {
         autoState = ACTUATORS_IN; 
       }
       if(temp == 0x09) {
+        if(autoState == INIT) {
+          Serial1.write(ACK);
+        }
         autoState = COMPLETE; 
       }
     }
@@ -650,7 +655,7 @@ void checkSerial() {
 
 void StartISR() {
   //noInterrupts();
-    if((long)(micros() - last_micros) > 15*1000) {
+    //if((long)(micros() - last_micros) > 15*1000) {
       if(autoState == WAIT_FOR_DRIVER) {
         autoState = VAN_READY;
         Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
@@ -660,7 +665,7 @@ void StartISR() {
         Serial.println(autoState);
       }
      
-    }
-    Serial.println("IN ISR, but debounce fails!");
-    last_micros = micros();
+    //}
+    /*Serial.println("IN ISR, but debounce fails!");
+    last_micros = micros();*/
 }

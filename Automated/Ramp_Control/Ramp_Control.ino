@@ -106,8 +106,8 @@ long man_lift_down_time = 0;  // the last time the output pin was sampled.
 const int DEBOUNCE_COUNT = 10;   // number of millis/samples to consider before declaring a debounced in
 
 void setup() {
-    Serial.begin(115200);
-    Serial1.begin(115200);
+    Serial.begin(9600);
+    Serial1.begin(9600);
 
     // Set ramp signals as inputs
     pinMode(manCartFwd, INPUT);
@@ -172,22 +172,6 @@ void setup() {
   the state to be returned (currstate). All inputs are
    active low. */
 uint16_t checkInputs() {
-/*
-  uint8_t tempState = 0x00;
-    
-  bool vanTire = debounceTireSwitch();
-  
-  tempState |= (!digitalRead(manCartFwd)) << FWD_IN_OFFSET;
-  tempState |= (!digitalRead(manCartBack)) << BACK_IN_OFFSET;
-  tempState |= (!digitalRead(cartAtFront)) << FWD_STOP_IN;
-  tempState |= (!digitalRead(cartAtBack)) << BACK_STOP_IN;
-  tempState |= (!digitalRead(manLiftUp)) << UP_IN_OFFSET;
-  tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
-  tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
-  tempState |= (!vanTire) << VAN_TIRE_SW;
-  return tempState;
-  */
-
   uint8_t tempState = 0x00;
   
   tempState |= (!debouncePin(manCartFwd)) << FWD_IN_OFFSET;
@@ -203,14 +187,12 @@ uint16_t checkInputs() {
 
 uint16_t manInputs(){
   uint8_t tempState = 0x00;
-  //bool manLiftDown = debounceManLiftDown():
-
+  
   tempState |= (!digitalRead(manCartFwd)) << FWD_IN_OFFSET;
   tempState |= (!digitalRead(manCartBack)) << BACK_IN_OFFSET;
   tempState |= (!digitalRead(cartAtFront)) << FWD_STOP_IN;
   tempState |= (!digitalRead(cartAtBack)) << BACK_STOP_IN;  
   tempState |= (!digitalRead(manLiftUp)) << UP_IN_OFFSET;
-  //tempState |= (!manLiftDown) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(manLiftDown)) << DOWN_IN_OFFSET;
   tempState |= (!digitalRead(liftAtBottom)) << DOWN_STOP_IN;
   return tempState;
@@ -227,46 +209,7 @@ int debouncePin(int pin)
     return HIGH;
 }
 
-bool debounceTireSwitch() {
-  if(millis() != tire_time) {
-    tire_reading = digitalRead(vanTireSw);
-    if(tire_reading == tire_current_state && tire_counter > 0) {
-      tire_counter--;
-    }
-    if(tire_reading != tire_current_state) {
-	    tire_counter++;
-    }
-
-    // If the input has shown the same value for long enough, let's switch it
-    if(tire_counter >= DEBOUNCE_COUNT) {
-      tire_counter = 0;
-      tire_current_state = tire_reading;
-    }
-    tire_time = millis();
-  }
-  return tire_current_state; 
-}
-
-bool debounceManLiftDown() {
-  if(millis() != man_lift_down_time) {
-     man_lift_down_reading = digitalRead(manLiftDown);
-	    if(man_lift_down_reading == man_lift_down_current_state && man_lift_down_counter > 0) {
-	      man_lift_down_counter--;
-	    }
-	    if(man_lift_down_reading != man_lift_down_current_state) {
-	      man_lift_down_counter++;
-	    }
-	
-    // If the input has shown the same value for long enough, let's switch it
-    if(man_lift_down_counter >= DEBOUNCE_COUNT) {
-      man_lift_down_counter = 0;
-      man_lift_down_current_state = man_lift_down_reading;
-    }
-    man_lift_down_time = millis();
- }
- return man_lift_down_current_state; 
-}
-enum ErrorState { NONE, EMERGENCY_BUTTON, LIFT_UP, LIFT_NOT_RISING, INIT_ERROR, READY_ERROR, PACK_NOT_AT_EITHER_SIDE, WAIT_FOR_VAN_ERROR, VAN_ERROR, MISSED_SIGNAL};
+enum ErrorState { NONE, EMERGENCY_BUTTON, LIFT_UP, LIFT_NOT_RISING, INIT_ERROR, READY_ERROR, CARTS_NOT_MOVING, PACK_NOT_AT_EITHER_SIDE, WAIT_FOR_VAN_ERROR, VAN_ERROR, MISSED_SIGNAL};
 ErrorState errState = NONE;
 
 enum State { INIT, VAN_READY, RAMP_READY, ALL_READY, STOP, START_EXCHANGE, POSITION_PACK, RAISE_LIFT, LOWER_LIFT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE, MOVE_BAT_TO_CHARGER, INIT_CHARGERS, WAIT_FOR_VAN};
@@ -287,7 +230,6 @@ uint16_t currState = 0x0000;
 uint16_t manState = 0x0000;
 
 void loop() {
-  //EIFR = 0x01;
   while (autoState != STOP) {
       switch (autoState) {
         case INIT: {
@@ -436,7 +378,8 @@ void loop() {
             autoState = RAISE_LIFT;
           }
           else if (packInBackCart) {
-            movFwd();
+            int count = 0;
+            movFwd(count);
             packInBackCart = false;
             packInFrontCart = true;
             autoState = RAISE_LIFT;
@@ -454,7 +397,8 @@ void loop() {
           Serial.println("POSITION_PACK: ");
           if(packInFrontCart) {
             if(digitalRead(cartAtBack) == LOW) {  //At back, move Fwd
-              movFwd();
+              int count = 0;
+              movFwd(count);
             }
             else if(digitalRead(cartAtFront) == HIGH) { //Not @ either ends
               Serial1.write(ERROR_SIGNAL);
@@ -806,14 +750,26 @@ void manControl() {
     }
 }
 
-void movFwd() {
+void movFwd(int count) {
+  if(count < 5) {
     digitalWrite(motorOn, HIGH);
-    delay(5000);
+    delay(2000);
     digitalWrite(moveCartFwd, HIGH);
     delay(1000);
     digitalWrite(moveCartFwd, LOW);
+    delay(1000);
+    if(digitalRead(cartAtBack) == LOW) {
+      count++;
+      movFwd(count);
+    }
     while(digitalRead(cartAtFront) == HIGH);
     digitalWrite(motorOn, LOW);
+  }
+  else {
+    Serial1.write(ERROR_SIGNAL);
+    errState = CARTS_NOT_MOVING;
+    error();
+  }
 }
 
 void stopCarts() {
@@ -823,7 +779,7 @@ void stopCarts() {
 
 void movRev() {
     digitalWrite(motorOn, HIGH);
-    delay(5000);
+    delay(2000);
     digitalWrite(moveCartBack, HIGH);
     delay(1000);
     digitalWrite(moveCartBack, LOW);
@@ -842,7 +798,7 @@ void raiseLift() {
       while (Serial1.available() == 0) {
       // SHOULD ADD LOGIC HERE IN CASE LIFT CRASHES OR INPUTS CHANGE
       // OR IF LIFT DOESN'T WORK AND LIFT_DOWN = T STILL...
-        checkSerial();
+        //checkSerial();
       }
       digitalWrite(moveLiftUp, LOW);
       if(digitalRead(liftAtBottom) == LOW) {
@@ -878,7 +834,9 @@ void lowerLift() {
     Serial.println("lower lift");
     digitalWrite(moveLiftUp, LOW);
     digitalWrite(moveLiftDown, HIGH);
-    while (digitalRead(liftAtBottom) == HIGH);
+    while(digitalRead(liftAtBottom) == HIGH) {
+      checkSerial();
+    }
     digitalWrite(moveLiftDown, LOW);
 }
 
@@ -962,7 +920,7 @@ uint8_t sendMessage(uint8_t message) {
   Serial1.write(message);
   unsigned long currTime = millis();
   while(!response) {
-    if(missCount > 5){
+    if(missCount > 8){
       return ERROR_SIGNAL;
     }
     if(Serial1.available() > 0) {
@@ -1047,7 +1005,7 @@ void printErrorMessage() {
     break;
 
     // Blink on/off 6 times
-    case PACK_NOT_AT_EITHER_SIDE:
+    case CARTS_NOT_MOVING:
       for(int i = 0; i < 3; i++) {
         blinkError();
         delay(500);
@@ -1063,10 +1021,32 @@ void printErrorMessage() {
         delay(2000);
       }
     break;
+    
+    // Blink on/off 7 times
+    case PACK_NOT_AT_EITHER_SIDE:
+      for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(500);
+        blinkError();
+        delay(2000);
+      }
+    break;
 
-     // Blink on/off 7 times
+     // Blink on/off 8 times
     case WAIT_FOR_VAN_ERROR:
       for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
         blinkError();
         delay(500);
         blinkError();
@@ -1084,9 +1064,11 @@ void printErrorMessage() {
       }
     break;
     
-   // Blink on/off 8 times
+   // Blink on/off 9 times
     case VAN_ERROR:
       for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
         blinkError();
         delay(500);
         blinkError();
@@ -1106,9 +1088,11 @@ void printErrorMessage() {
       }
     break;
 
-    // Blink on/off 9 times
+    // Blink on/off 10 times
     case MISSED_SIGNAL:
       for(int i = 0; i < 3; i++) {
+        blinkError();
+        delay(500);
         blinkError();
         delay(500);
         blinkError();
@@ -1163,6 +1147,16 @@ void checkSerial() {
         else {
             Serial1.write(0x02);
         }*/
+      }
+      if(temp == 0x06) {
+        if(autoState == LOWER_LIFT) {
+          Serial1.write(ACK);
+        }
+      }
+      if(temp == 0x08) {
+        if(autoState == LOWER_LIFT) {
+          Serial1.write(ACK);
+        }
       }
       if (temp == ERROR_SIGNAL) {
         errState = VAN_ERROR;
