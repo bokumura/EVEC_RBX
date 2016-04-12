@@ -378,8 +378,8 @@ void loop() {
             autoState = RAISE_LIFT;
           }
           else if (packInBackCart) {
-            //int count = 0;
-            movFwd();
+            int count = 0;
+            movFwd(count);
             packInBackCart = false;
             packInFrontCart = true;
             autoState = RAISE_LIFT;
@@ -397,8 +397,8 @@ void loop() {
           Serial.println("POSITION_PACK: ");
           if(packInFrontCart) {
             if(digitalRead(cartAtBack) == LOW) {  //At back, move Fwd
-              //int count = 0;
-              movFwd();
+              int count = 0;
+              movFwd(count);
             }
             else if(digitalRead(cartAtFront) == HIGH) { //Not @ either ends
               Serial1.write(ERROR_SIGNAL);
@@ -750,9 +750,8 @@ void manControl() {
     }
 }
 
-void movFwd() {
-  /*
-  if(count < 4) {
+void movFwd(int count) {
+  if(count < 5) {
     digitalWrite(motorOn, HIGH);
     delay(2000);
     digitalWrite(moveCartFwd, HIGH);
@@ -765,23 +764,8 @@ void movFwd() {
     }
     while(digitalRead(cartAtFront) == HIGH);
     digitalWrite(motorOn, LOW);
-    */
-  int count = 0;
-  digitalWrite(motorOn, HIGH);
-  delay(2000);
-  digitalWrite(moveCartFwd, HIGH);
-  delay(1000);
-  digitalWrite(moveCartFwd, LOW);
-  while (digitalRead(cartAtFront) == HIGH)
-  {
-    if (debouncePin(cartAtBack) == LOW && count++ < 4) {
-      delay(1000);
-      digitalWrite(moveCartFwd, HIGH);
-      delay(1000);
-      digitalWrite(moveCartFwd, LOW);
-    }
   }
-  if (count == 4) {
+  else {
     Serial1.write(ERROR_SIGNAL);
     errState = CARTS_NOT_MOVING;
     error();
