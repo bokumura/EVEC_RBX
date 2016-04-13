@@ -4,6 +4,10 @@ INPUTS:
   Bit 1 = manActuatorsDisengage
   Bit 2 = actuatorsEngaged
   Bit 3 = actuatorsDisengaged
+  Bit 4 = NOT USED
+  Bit 5 = NOT USED
+  Bit 6 = NOT USED
+  Bit 7 = NOG USED
 OTHER INPUTS:
   START_PIN
   LIFT_UP_PIN
@@ -47,6 +51,7 @@ const int manActuatorsEngage = 16;  //B2 = Digital pin 16
 const int manActuatorsDisengage = 15;  //B1 = Digital pin 15
 const int frontActuatorLocationPin = 0;  //F7 = Analog pin 0
 const int rearActuatorLocationPin = 1;  //F6 = Analog pin 1
+const int ignitionSwitchPin = 21; //F4 = Digital pin 21
 
 //ERROR PIN
 const int ERROR_PIN = 22;  //F1
@@ -87,6 +92,9 @@ void setup() {
     pinMode(manActuatorsDisengage, INPUT);
     pinMode(frontActuatorLocationPin, INPUT);
     pinMode(rearActuatorLocationPin, INPUT);
+    
+    //Set other inputs
+    pinMode(ignitionSwitchPin, INPUT);
     pinMode(START_PIN, INPUT);
     pinMode(LIFT_UP_PIN, INPUT);
   
@@ -103,6 +111,9 @@ void setup() {
     digitalWrite(manActuatorsDisengage, HIGH);
     digitalWrite(START_PIN, HIGH);
     digitalWrite(LIFT_UP_PIN, HIGH);
+    
+    //Start ignition pin as low
+    digitalWrite(ignitionSwitchPin, LOW);
    
     //Initialize outputs to low
     digitalWrite(ERROR_PIN, LOW);
@@ -149,7 +160,7 @@ uint8_t manInputs() {
   return tempState;
 }
 
-enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL};
+enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL, IGNITION_ON};
 ErrorState errState = NONE;
 
 enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
@@ -194,6 +205,26 @@ void loop() {
         break;
 
         case VAN_READY: {
+          // make sure ignition is off
+          int count = 0;
+          int ignitionOff = 0;
+          while (count < 5 && !ignitionOff)
+          {
+            uint8_t  status = 0x00;
+            for (int count2 = 0; count < 5; count++)
+            {
+              delay(100);
+              status |= digitalRead(ignitionSwitchPin);
+            }
+            if (status == 0x00)
+            ignitionOff = 1;
+          }
+          if (!ignitionOff)
+          {
+            errState = IGNITION_ON;
+            error();
+          }
+          
           Serial.println("VAN_READY: ");
           int message =  sendMessage(0x01);
           if(message == 0x03) {
@@ -558,6 +589,18 @@ void printErrorMessage() {
           blinkError();
           delay(2000);
       }
+    break;
+    
+    case IGNITION_ON:
+      for (int i = 0; i < 3; i++)
+      {
+        for (int j = 0; j < 8; j++)
+        {
+          blinkError();
+          delay(500);
+        }
+      }
+    break;
   }
 }
 
