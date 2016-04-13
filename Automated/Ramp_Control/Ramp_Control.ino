@@ -378,8 +378,7 @@ void loop() {
             autoState = RAISE_LIFT;
           }
           else if (packInBackCart) {
-            int count = 0;
-            movFwd(count);
+            movFwd();
             packInBackCart = false;
             packInFrontCart = true;
             autoState = RAISE_LIFT;
@@ -397,8 +396,7 @@ void loop() {
           Serial.println("POSITION_PACK: ");
           if(packInFrontCart) {
             if(digitalRead(cartAtBack) == LOW) {  //At back, move Fwd
-              int count = 0;
-              movFwd(count);
+              movFwd();
             }
             else if(digitalRead(cartAtFront) == HIGH) { //Not @ either ends
               Serial1.write(ERROR_SIGNAL);
@@ -750,26 +748,23 @@ void manControl() {
     }
 }
 
-void movFwd(int count) {
-  if(count < 5) {
-    digitalWrite(motorOn, HIGH);
-    delay(2000);
-    digitalWrite(moveCartFwd, HIGH);
-    delay(1000);
-    digitalWrite(moveCartFwd, LOW);
-    delay(1000);
+void movFwd() {
+  digitalWrite(motorOn, HIGH);
+  delay(2000);
+  
+  int count = 0;
+  while(digitalRead(cartAtFront) == HIGH && count < 5) {
     if(digitalRead(cartAtBack) == LOW) {
       count++;
-      movFwd(count);
+      moveCart();
     }
-    while(digitalRead(cartAtFront) == HIGH);
-    digitalWrite(motorOn, LOW);
   }
-  else {
+  if(count >= 5) {
     Serial1.write(ERROR_SIGNAL);
     errState = CARTS_NOT_MOVING;
     error();
   }
+  digitalWrite(motorOn, LOW);
 }
 
 void stopCarts() {
@@ -780,13 +775,27 @@ void stopCarts() {
 void movRev() {
     digitalWrite(motorOn, HIGH);
     delay(2000);
-    digitalWrite(moveCartBack, HIGH);
-    delay(1000);
-    digitalWrite(moveCartBack, LOW);
-    while(digitalRead(cartAtBack) == HIGH);
+    int count = 0;
+    while(digitalRead(cartAtBack) == HIGH && count < 5) {
+      if(digitalRead(cartAtFront) == LOW) {
+        count++;
+        moveCart();
+      }
+    }
+    if(count >= 5) {
+      Serial1.write(ERROR_SIGNAL);
+      errState = CARTS_NOT_MOVING;
+      error();
+    }
     digitalWrite(motorOn, LOW);
 }
 
+void moveCart() {
+  digitalWrite(moveCartFwd, HIGH);
+  delay(1000);
+  digitalWrite(moveCartFwd, LOW);
+  delay(2000);
+}
 void raiseLift() {
   Serial.println("raise lift");
     int message = sendMessage(0x04);
