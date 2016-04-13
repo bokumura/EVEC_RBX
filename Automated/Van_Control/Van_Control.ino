@@ -7,16 +7,17 @@ INPUTS:
   Bit 4 = NOT USED
   Bit 5 = NOT USED
   Bit 6 = NOT USED
-  Bit 7 = NOG USED
+  Bit 7 = NOT USED
 OTHER INPUTS:
   START_PIN
   LIFT_UP_PIN
+  ignitionSwitchPin
 */ 
 
 /*
 OUTPUTS:
   1. movEngageActuators
-    2. movDisengageActuators
+  2. movDisengageActuators
 OTHER OUTPUTS:
   ERROR_PIN
   READY_PIN
@@ -28,8 +29,7 @@ OTHER OUTPUTS:
 const int ERROR_SIGNAL = 0xFF;
 const int ACK = 0x02;
 
-/* If signal not received within this time limit, 
- *  signal is lost. ADDED 3/9 */
+/* If signal not received within this time limit, signal was lost. */
 const int LOST_SIGNAL = 1000;
 
 volatile unsigned long last_micros;
@@ -44,14 +44,13 @@ const int ACTUATORS_DISENGAGED_OFFSET = 3;
 const int ACTUATORS_DISENGAGED_THRESHHOLD = 35;
 const int ACTUATORS_ENGAGED_THRESHHOLD = 750;
 const int ACTUATOR_RANGE = 10;
-const int ACTUATOR_RANGE_DISENGAGED = 100;
 
 //Inputs for van
-const int manActuatorsEngage = 16;  //B2 = Digital pin 16
-const int manActuatorsDisengage = 15;  //B1 = Digital pin 15
-const int frontActuatorLocationPin = 0;  //F7 = Analog pin 0
-const int rearActuatorLocationPin = 1;  //F6 = Analog pin 1
-const int ignitionSwitchPin = 21; //F4 = Digital pin 21
+const int manActuatorsEngage = 16;  //B2
+const int manActuatorsDisengage = 15;  //B1
+const int frontActuatorLocationPin = 0;  //F7
+const int rearActuatorLocationPin = 1;  //F6
+const int ignitionSwitchPin = 21; //F4
 
 //ERROR PIN
 const int ERROR_PIN = 22;  //F1
@@ -72,10 +71,8 @@ const int EXCHANGE_PIN = 13;//C7
 const int LIFT_UP_PIN = 14;//B3
 
 //Outputs
-const int movActuatorsEngage = 6;  //D7 = Digital pin 6
-const int movActuatorsDisengage = 12;  //D6 = Digital pin 12
-
-
+const int movActuatorsEngage = 6;  //D7
+const int movActuatorsDisengage = 12;  //D6
 
 //Current State
 uint16_t currState = 0x00;
@@ -136,56 +133,63 @@ uint8_t checkInputs() {
     tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
 
     tempState |= ((analogRead(frontActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))
-    && (analogRead(rearActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE)))
-    << ACTUATORS_ENGAGED_OFFSET;
+                 && (analogRead(rearActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))) 
+                 << ACTUATORS_ENGAGED_OFFSET;
     
     tempState |= ((analogRead(frontActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE)) 
-    && (analogRead(rearActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE)))
-    << ACTUATORS_DISENGAGED_OFFSET;
-   return tempState;
+                 && (analogRead(rearActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE))) 
+                 << ACTUATORS_DISENGAGED_OFFSET;
+    return tempState;
 }
 
+/* Should I just use checkInputs instead? It includes the actuator range... */
 uint8_t manInputs() {
   uint8_t tempState = 0x00;
   tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
   tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
   
   tempState |= ((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
-    && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
-    << ACTUATORS_ENGAGED_OFFSET;
+               && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))
+               << ACTUATORS_ENGAGED_OFFSET;
     
-    tempState |= ((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
-    && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))
-    << ACTUATORS_DISENGAGED_OFFSET;
+  tempState |= ((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
+               && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))
+               << ACTUATORS_DISENGAGED_OFFSET;
   return tempState;
 }
 
-enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL, IGNITION_ON};
+enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL};
 ErrorState errState = NONE;
 
-enum State { INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
-//volatile State autoState = INIT;
+enum State {INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
 State autoState = INIT;
 
 void loop() {
   while(autoState != STOP) {
       switch(autoState) {
+        
         case INIT: {
           Serial.println("VAN_INIT: ");
           currState = checkInputs();
           checkSerial();
           Serial.print("currState: ");
           Serial.println(currState, HEX);
+
+          /* Lift up. Go into error */
           if(digitalRead(LIFT_UP_PIN) == LOW) {
             Serial.println("LIFT_UP! ERROR!");
             Serial1.write(ERROR_SIGNAL);
             errState = LIFT_UP;
             error();
           }
+
+          /* Correct state. (Actuators in and button not pressed). */
           if(currState == 0x04) {   //Actuators engaged
             Serial.println("All good. Going to WAIT.");
             autoState = WAIT;
           }
+
+          /* Actuators not engaged. ERROR! */
           else {
             Serial.println("Actuators Not engaged. ERROR!");
             Serial1.write(ERROR_SIGNAL);
@@ -194,81 +198,46 @@ void loop() {
           }
         }
         break;
+        
         case WAIT_FOR_DRIVER: {
-          EIFR = 0x01;
+          // Just want to wait for ISR to engage OR for van to send signal (Error/not ready). 
+          EIFR = 0x01; 
           Serial.println("VAN_WAIT_FOR_DRIVER: "); 
           while(autoState == WAIT_FOR_DRIVER) {
             checkSerial();
           }
-          // Just want to wait for ISR to engage.
         }
         break;
 
         case VAN_READY: {
-          // make sure ignition is off
-          int count = 0;
-          int ignitionOff = 0;
-          while (count < 5 && !ignitionOff)
-          {
-            uint8_t  status = 0x00;
-            for (int count2 = 0; count < 5; count++)
-            {
-              delay(100);
-              status |= digitalRead(ignitionSwitchPin);
-            }
-            if (status == 0x00)
-            ignitionOff = 1;
-          }
-          if (!ignitionOff)
-          {
-            errState = IGNITION_ON;
-            error();
-          }
-          
+          // make sure ignition is off before continuing.
+          checkIgnition();
+
+          /* Original VAN_READY state: */
           Serial.println("VAN_READY: ");
           int message =  sendMessage(0x01);
           if(message == 0x03) {
             autoState = EXCHANGE;
-            Serial.println("SETTING AUTOSTATE TO EXCHANGE!");
           }
           else if(message == 0x04) {
-            /* Must have missed 0x03 (ACK) and ramp in raiseLift */
+            /* Must have missed 0x03 (ACK) and now ramp is in raiseLift */
             autoState = EXCHANGE; /* Just continue to go forward */
           }
-          /* Possibly missed signal? Error? */
           else {
-            Serial.println("DIDN'T SET AUTOSTATE TO EXCHANGE!");
             Serial.print("Message was: ");
             Serial.println(message, HEX);
             Serial1.write(ERROR_SIGNAL);
             errState = MISSED_SIGNAL;
             error();
-            /* SHOULD I SET ERRSTATE HERE?? */
           }
         }
         break;
 
-      /*
-      case START: {
-        Serial.println("VAN_START: ");
-        digitalWrite(READY_PIN, LOW);
-        uint8_t response = sendMessage(0x01);
-        if(response == 0x03) {
-          autoState = EXCHANGE; 
-        }
-        else if(response == 0x02) {
-          autoState = VAN_READY;
-        }
-      }
-      break;
-      */
-      
         case EXCHANGE: {
           Serial.println("VAN_EXCHANGE");
           digitalWrite(COMPLETE_LED_PIN, LOW);
           digitalWrite(READY_PIN, LOW);
           digitalWrite(EXCHANGE_PIN, HIGH);
-          Serial.println("SET EXCHANGE PIN AND SET READY PIN LOW");
           currState = checkInputs();
           while(autoState == EXCHANGE && currState == 0x04) {
             checkSerial();
@@ -280,6 +249,8 @@ void loop() {
         case RAISE_LIFT: {
           Serial.println("VAN_RAISE_LIFT: ");
           currState = checkInputs();
+
+          /* First time raising lift. (Actuators are in) */
           if(actsIn) {
             if(currState != 0x04) {
               Serial.println("Actuators not in! Error!");
@@ -291,6 +262,7 @@ void loop() {
               actsIn = false;
             }
           }
+          /* 2nd time raising list. (Acutators are out) */
           else {
             if(currState != 0x08) {
               Serial.println("Actuators not all the way out! Error");
@@ -302,8 +274,9 @@ void loop() {
               actsIn = true;
             }
           }
+          
           Serial.println("raise lift");
-          // Should I do checks here before sending the ok?
+          /* Check to ensure the lift is down to begin with */
           if(digitalRead(LIFT_UP_PIN) == LOW) {
             Serial.println("LIFT Already up?! Error mode!");
             Serial1.write(ERROR_SIGNAL);
@@ -316,7 +289,7 @@ void loop() {
           while(digitalRead(LIFT_UP_PIN) == HIGH) {
             checkSerial();
           }
-          int message = sendMessage(0x05); //0x06
+          int message = sendMessage(0x05);
           if(message == ACK) {
             Serial.println("lift up");
             autoState = WAIT;
@@ -358,7 +331,6 @@ void loop() {
             Serial.println("in");
             actuatorsIn();
             autoState = WAIT;
-            //autoState = COMPLETE;
         }
         break;
       
@@ -406,6 +378,23 @@ void manControl() {
         error();
       break;
     }
+  }
+}
+
+void checkIgnition() {
+  int count = 0;
+  bool ignitionOn = false;
+  while (count < 5 && !ignitionOn) {
+    uint8_t  status = 0x00;
+    delay(100);
+    status |= digitalRead(ignitionSwitchPin);
+    count++;
+    if (status != 0x00)
+      ignitionOn = true;
+  }
+  if (ignitionOn) {
+    Serial.println("Ignition is on. Must turn off before pressing button.");
+    autoState = WAIT_FOR_DRIVER;
   }
 }
 
@@ -471,27 +460,20 @@ void error() {
   Serial.print("AutoState is: ");
   Serial.println(autoState);
 
-  int front = analogRead(frontActuatorLocationPin);
+  /*int front = analogRead(frontActuatorLocationPin);
   int back = analogRead(rearActuatorLocationPin);
   Serial.print("Front actuator pin is: ");
   Serial.println(front);
   Serial.print("Read actuator pin is: ");
   Serial.println(back);
 
-  /*while(Serial1.available() == 0);
-  int message = Serial1.read();
-  Serial1.write(ACK);
-  Serial.print("Ramp currState is: ");
-  Serial.println(message);
-  */
-  delay(5000);
+  delay(5000);*/
   printErrorMessage();
   digitalWrite(ERROR_PIN, HIGH);
   manControl();
 }
 
 void printErrorMessage() {
-  
   switch(errState) {
 
     // Blink on/off 1 time
@@ -572,6 +554,7 @@ void printErrorMessage() {
       }
     break;
 
+    // Blink on/off 7 times
     case MISSED_SIGNAL:
       for(int i = 0; i < 3; i++) {
           blinkError();
@@ -588,17 +571,6 @@ void printErrorMessage() {
           delay(500);
           blinkError();
           delay(2000);
-      }
-    break;
-    
-    case IGNITION_ON:
-      for (int i = 0; i < 3; i++)
-      {
-        for (int j = 0; j < 8; j++)
-        {
-          blinkError();
-          delay(500);
-        }
       }
     break;
   }
@@ -619,7 +591,7 @@ uint8_t sendMessage(uint8_t message) {
   Serial1.write(message);
   unsigned long currTime = millis();
   while(!response) {
-    if(missCount > 8){
+    if(missCount > 8) {
       return ERROR_SIGNAL;
     }
     if(Serial1.available() > 0) {
@@ -632,8 +604,6 @@ uint8_t sendMessage(uint8_t message) {
       Serial1.write(message);
       missCount++;
       currTime = millis();
-      //response = true;
-      //packate = ERROR_SIGNAL;
     }
   }
   return packate; 
@@ -645,20 +615,20 @@ void checkSerial() {
       temp = Serial1.read();
       Serial.print("checkSerial: temp is: ");
       Serial.println(temp, HEX);
+      
       if(temp == ERROR_SIGNAL) {
-        /* DEBUGGING */
         Serial.println("Received error from ramp!");
-        delay(3000);
-        //autoState = STOP;
         errState = RAMP_ERROR;
         error();
       }
+      
       if(temp == 0x01) {
         rampReady = true;
         digitalWrite(READY_PIN, HIGH);
         Serial1.write(ACK);
         autoState = WAIT_FOR_DRIVER;
       }
+      
       if(temp == 0x04) {
         // if we're already in RAISE_LIFT, the ACK was missed, resend it
         if (autoState == RAISE_LIFT)
@@ -668,10 +638,14 @@ void checkSerial() {
       }
       if(temp == 0x05) {
         if(autoState == WAIT_FOR_DRIVER) {
+          Serial1.write(ACK);
           autoState = WAIT;
           digitalWrite(READY_PIN, LOW);
           digitalWrite(COMPLETE_LED_PIN, LOW);
           digitalWrite(EXCHANGE_PIN, LOW);
+        }
+        else if(autoState == WAIT) {
+          Serial1.write(ACK); // Ramp may have missed ACK from driving off ramp.
         }
       }
       if(temp == 0x06) {
@@ -697,18 +671,28 @@ void checkSerial() {
 
 
 void StartISR() {
-  //noInterrupts();
-    //if((long)(micros() - last_micros) > 15*1000) {
-      if(autoState == WAIT_FOR_DRIVER) {
-        autoState = VAN_READY;
-        Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
-      }
-      else {
-        Serial.print("IN ISR! AutoState = ");
-        Serial.println(autoState);
-      }
-     
-    //}
-    /*Serial.println("IN ISR, but debounce fails!");
-    last_micros = micros();*/
+  bool buttonPressed = true;
+  for(int i = 0; i < 5 && buttonPressed; i++) {
+    /* Delay 1/10 second and check if button is pressed still */
+    delayMicroseconds(100000);
+    if(digitalRead(START_PIN) == HIGH) {  /* Button no longer pressed */
+      buttonPressed = false;
+    }
+  }
+
+  /* Button was pressed for .5 seconds. Should be safe to continue. */
+  if(buttonPressed) {
+    if(autoState == WAIT_FOR_DRIVER) {
+      autoState = VAN_READY;
+      Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
+    }
+    else {
+      Serial.print("IN ISR! AutoState = ");
+      Serial.println(autoState);
+    }
+  }
+  else {
+    Serial.println("button not pressed down long enough.");
+  }
 }
+
