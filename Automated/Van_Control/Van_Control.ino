@@ -37,8 +37,9 @@ volatile unsigned long last_micros;
 //Offsets of signals in curState
 const int MAN_ACTUATORS_ENGAGE_OFFSET = 0;
 const int MAN_ACTUATORS_DISENGAGE_OFFSET = 1;
-const int ACTUATORS_ENGAGED_OFFSET = 2;
-const int ACTUATORS_DISENGAGED_OFFSET = 3;
+const int ACTUATORS_ENGAGED_OFFSET = 0;
+const int ACTUATORS_DISENGAGED_OFFSET = 1;
+const int LIFT_OFFSET = 2;
 
 //Threshholds for actuator placement
 const int ACTUATORS_DISENGAGED_THRESHHOLD = 35;
@@ -75,10 +76,11 @@ const int movActuatorsEngage = 6;  //D7
 const int movActuatorsDisengage = 12;  //D6
 
 //Current State
-uint16_t currState = 0x00;
+uint16_t currInput = 0x00;
 uint16_t manState = 0x0000;
 bool rampReady = false;
 bool actsIn = true;
+uint16_t correctInput = 0x00;
 
 void setup() {
     Serial.begin(9600);
@@ -129,9 +131,10 @@ void setup() {
     to their threshholds and set accordingly. */
 uint8_t checkInputs() {
   uint8_t tempState = 0x00;
-    tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
+    /*tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
     tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
-
+    */ 
+    
     tempState |= ((analogRead(frontActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))
                  && (analogRead(rearActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))) 
                  << ACTUATORS_ENGAGED_OFFSET;
@@ -139,6 +142,8 @@ uint8_t checkInputs() {
     tempState |= ((analogRead(frontActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE)) 
                  && (analogRead(rearActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE))) 
                  << ACTUATORS_DISENGAGED_OFFSET;
+
+    tempState |= (digitalRead(LIFT_UP_PIN) << LIFT_OFFSET);
     return tempState;
 }
 
@@ -158,44 +163,26 @@ uint8_t manInputs() {
   return tempState;
 }
 
-enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WAIT_FOR_VAN_ERROR, RAMP_ERROR, MISSED_SIGNAL};
+enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WRONG_INPUT, RAMP_ERROR, MISSED_SIGNAL};
 ErrorState errState = NONE;
 
 enum State {INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
-State autoState = INIT;
+State currState = INIT;
+State prevState = INIT;
 
 void loop() {
-  while(autoState != STOP) {
-      switch(autoState) {
+  while(currState != STOP) {
+      switch(currState) {
         
         case INIT: {
           Serial.println("VAN_INIT: ");
-          currState = checkInputs();
+          currInput = checkInputs();
           checkSerial();
-          Serial.print("currState: ");
-          Serial.println(currState, HEX);
+          Serial.print("currInput: ");
+          Serial.println(currInput, HEX);
 
-          /* Lift up. Go into error */
-          if(digitalRead(LIFT_UP_PIN) == LOW) {
-            Serial.println("LIFT_UP! ERROR!");
-            Serial1.write(ERROR_SIGNAL);
-            errState = LIFT_UP;
-            error();
-          }
-
-          /* Correct state. (Actuators in and button not pressed). */
-          if(currState == 0x04) {   //Actuators engaged
-            Serial.println("All good. Going to WAIT.");
-            autoState = WAIT;
-          }
-
-          /* Actuators not engaged. ERROR! */
-          else {
-            Serial.println("Actuators Not engaged. ERROR!");
-            Serial1.write(ERROR_SIGNAL);
-            errState = ACTUATORS_DISENGAGED;
-            error();
-          }
+          correctInput = 0x01;
+          currState = WAIT;
         }
         break;
         
@@ -203,26 +190,37 @@ void loop() {
           // Just want to wait for ISR to engage OR for van to send signal (Error/not ready). 
           EIFR = 0x01; 
           Serial.println("VAN_WAIT_FOR_DRIVER: "); 
-          while(autoState == WAIT_FOR_DRIVER) {
-            checkSerial();
+          currInput = checkInputs();
+          if(currInput != correctInput) {
+            Serial1.write(ERROR_SIGNAL);
+            errState = WRONG_INPUT;
+            error();
           }
+          checkSerial();
         }
         break;
 
         case VAN_READY: {
+          Serial.println("VAN_READY: ");
           // make sure ignition is off before continuing.
           checkIgnition();
+          currInput = checkInputs();
+          if(currInput != correctInput) {
+            Serial1.write(ERROR_SIGNAL);
+            errState = WRONG_INPUT;
+            error();
+          }
 
-          /* Original VAN_READY state: */
-          Serial.println("VAN_READY: ");
+          /* Could possibly add checking for Lift_up */
           int message =  sendMessage(0x01);
           if(message == 0x03) {
-            autoState = EXCHANGE;
+            currState = EXCHANGE;
           }
           else if(message == 0x04) {
             /* Must have missed 0x03 (ACK) and now ramp is in raiseLift */
-            autoState = EXCHANGE; /* Just continue to go forward */
+            currState = EXCHANGE; /* Just continue to go forward */
           }
+          /* Should I check here to see if it got the timeout signal? */
           else {
             Serial.print("Message was: ");
             Serial.println(message, HEX);
@@ -238,21 +236,19 @@ void loop() {
           digitalWrite(COMPLETE_LED_PIN, LOW);
           digitalWrite(READY_PIN, LOW);
           digitalWrite(EXCHANGE_PIN, HIGH);
-          currState = checkInputs();
-          while(autoState == EXCHANGE && currState == 0x04) {
-            checkSerial();
-            currState = checkInputs();
-          }
+
+          correctInput = 0x01;
+          currState = WAIT;
         }
         break;
       
         case RAISE_LIFT: {
           Serial.println("VAN_RAISE_LIFT: ");
-          currState = checkInputs();
+          currInput = checkInputs();
 
           /* First time raising lift. (Actuators are in) */
           if(actsIn) {
-            if(currState != 0x04) {
+            if(currInput != 0x01) {
               Serial.println("Actuators not in! Error!");
               Serial1.write(ERROR_SIGNAL);
               errState = ACTUATORS_DISENGAGED;
@@ -264,7 +260,7 @@ void loop() {
           }
           /* 2nd time raising list. (Acutators are out) */
           else {
-            if(currState != 0x08) {
+            if(currInput != 0x02) {
               Serial.println("Actuators not all the way out! Error");
               Serial1.write(ERROR_SIGNAL);
               errState = ACTUATORS_ENGAGED;
@@ -292,15 +288,15 @@ void loop() {
           int message = sendMessage(0x05);
           if(message == ACK) {
             Serial.println("lift up");
-            autoState = WAIT;
+            currState = WAIT;
           }
           else if(message == 0x08) {
             Serial.println("Missed ACK, but ramp received message. Put acts in. ");
-            autoState = WAIT;
+            currState = WAIT;
           }
           else if(message == 0x06) {
             Serial.println("Missed ACK, but ramp received message. Take acts out. ");
-            autoState = WAIT;
+            currState = WAIT;
           }
           else {
             Serial1.write(ERROR_SIGNAL);
@@ -312,9 +308,13 @@ void loop() {
       
         case WAIT: {
           Serial.println("VAN_WAIT: ");
-          while(autoState == WAIT) {
-            checkSerial(); 
+          currInput = checkInputs();
+          if(currInput != correctInput) {
+            Serial1.write(ERROR_SIGNAL);
+            errState = WRONG_INPUT;
+            error();
           }
+          checkSerial(); 
         }
         break;
       
@@ -322,7 +322,7 @@ void loop() {
             Serial.println("VAN_ACTUATORS_OUT: ");
             Serial.println("out");
             actuatorsOut();
-            autoState = WAIT;
+            currState = WAIT;
         }
         break;
       
@@ -330,7 +330,7 @@ void loop() {
             Serial.println("VAN_ACTUATORS_IN: ");
             Serial.println("in");
             actuatorsIn();
-            autoState = WAIT;
+            currState = WAIT;
         }
         break;
       
@@ -339,7 +339,7 @@ void loop() {
           Serial1.write(ACK);
           digitalWrite(EXCHANGE_PIN,LOW);
           digitalWrite(COMPLETE_LED_PIN, HIGH);
-          autoState = INIT;
+          currState = INIT;
           Serial1.flush();
         }
         break;
@@ -352,9 +352,9 @@ void manControl() {
     manState = manInputs();
     Serial.print("VAN_MANUAL State: ");
     Serial.println(manState, HEX);
-    currState = checkInputs();
-    Serial.print("Currstates is: ");
-    Serial.println(currState);
+    currInput = checkInputs();
+    Serial.print("currInputs is: ");
+    Serial.println(currInput);
     switch(manState) {
       case 0x00: //Everything is off
       case 0x04: //Actuators engaged, not moving
@@ -394,7 +394,7 @@ void checkIgnition() {
   }
   if (ignitionOn) {
     Serial.println("Ignition is on. Must turn off before pressing button.");
-    autoState = WAIT_FOR_DRIVER;
+    currState = WAIT_FOR_DRIVER;
   }
 }
 
@@ -455,10 +455,10 @@ void error() {
 
   /* DEBUGGING! */
   Serial.println("Van ERROR. Power down. ");  
-  Serial.print("CurrState is: ");
+  Serial.print("currInput is: ");
+  Serial.println(currInput);
+  Serial.print("currState is: ");
   Serial.println(currState);
-  Serial.print("AutoState is: ");
-  Serial.println(autoState);
 
   /*int front = analogRead(frontActuatorLocationPin);
   int back = analogRead(rearActuatorLocationPin);
@@ -521,7 +521,7 @@ void printErrorMessage() {
     break;
 
     // Blink on/off 5 times
-    case WAIT_FOR_VAN_ERROR:
+    case WRONG_INPUT:
       for(int i = 0; i < 3; i++) {
           blinkError();
           delay(500);
@@ -626,47 +626,54 @@ void checkSerial() {
         rampReady = true;
         digitalWrite(READY_PIN, HIGH);
         Serial1.write(ACK);
-        autoState = WAIT_FOR_DRIVER;
+        currState = WAIT_FOR_DRIVER;
       }
       
       if(temp == 0x04) {
         // if we're already in RAISE_LIFT, the ACK was missed, resend it
-        if (autoState == RAISE_LIFT)
+        if (currState == RAISE_LIFT) {
           Serial1.write(0x03);
-        autoState = RAISE_LIFT; 
+          currState == RAISE_LIFT;
+        }
+        else if(currState == WAIT)
+          currState = RAISE_LIFT; 
         Serial.println("state to raise");
       }
       if(temp == 0x05) {
-        if(autoState == WAIT_FOR_DRIVER) {
+        if(currState == WAIT_FOR_DRIVER) { /* Or prevState == EXCHANGE */
           Serial1.write(ACK);
-          autoState = WAIT;
+          currState = WAIT;
           digitalWrite(READY_PIN, LOW);
           digitalWrite(COMPLETE_LED_PIN, LOW);
           digitalWrite(EXCHANGE_PIN, LOW);
         }
-        else if(autoState == WAIT) {
+        else if(currState == WAIT) {
           Serial1.write(ACK); // Ramp may have missed ACK from driving off ramp.
         }
       }
       if(temp == 0x06) {
-        if(autoState == ACTUATORS_OUT)
+        if(currState == ACTUATORS_OUT)
           Serial1.write(ACK);
-        autoState = ACTUATORS_OUT; 
+        else if(currState == WAIT)
+          currState = ACTUATORS_OUT; 
       }
       if(temp == 0x08) {
-        if(autoState == ACTUATORS_IN)
+        if(currState == ACTUATORS_IN)
           Serial1.write(ACK);
-        autoState = ACTUATORS_IN; 
+        else if(currState == WAIT)
+          currState = ACTUATORS_IN; 
       }
       if(temp == 0x09) {
-        if(autoState == INIT) {
+        if(currState == INIT) {
           Serial1.write(ACK);
+          currState = COMPLETE;
         }
-        autoState = COMPLETE; 
+        else if(currState == WAIT)
+          currState = COMPLETE; 
       }
     }
-    Serial.print("autoState:");
-    Serial.println(autoState);
+    Serial.print("currState:");
+    Serial.println(currState);
 }
 
 
@@ -682,13 +689,13 @@ void StartISR() {
 
   /* Button was pressed for .5 seconds. Should be safe to continue. */
   if(buttonPressed) {
-    if(autoState == WAIT_FOR_DRIVER) {
-      autoState = VAN_READY;
+    if(currState == WAIT_FOR_DRIVER) {
+      currState = VAN_READY;
       Serial.println("DRIVER_HIT_START_BUTTON! Go to VAN_READY.");
     }
     else {
       Serial.print("IN ISR! AutoState = ");
-      Serial.println(autoState);
+      Serial.println(currState);
     }
   }
   else {
