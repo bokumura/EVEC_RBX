@@ -134,7 +134,7 @@ uint8_t checkInputs() {
     /*tempState |= (!digitalRead(manActuatorsEngage)) << MAN_ACTUATORS_ENGAGE_OFFSET;
     tempState |= (!digitalRead(manActuatorsDisengage)) << MAN_ACTUATORS_DISENGAGE_OFFSET;
     */ 
-    
+    /* Actuators engaged */
     tempState |= ((analogRead(frontActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))
                  && (analogRead(rearActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))) 
                  << ACTUATORS_ENGAGED_OFFSET;
@@ -166,7 +166,7 @@ uint8_t manInputs() {
 enum ErrorState {NONE, LIFT_UP, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, READY_ERROR, WRONG_INPUT, RAMP_ERROR, MISSED_SIGNAL};
 ErrorState errState = NONE;
 
-enum State {INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT, ACTUATORS_OUT, ACTUATORS_IN, COMPLETE};
+enum State {INIT, WAIT_FOR_DRIVER, VAN_READY, STOP, EXCHANGE, RAISE_LIFT, WAIT_FOR_LIFT_UP, WAIT, ACTUATORS_OUT, WAIT_FOR_ACTS_OUT, ACTUATORS_IN, WAIT_FOR_ACTS_IN, COMPLETE};
 State currState = INIT;
 State prevState = INIT;
 
@@ -246,7 +246,15 @@ void loop() {
           Serial.println("VAN_RAISE_LIFT: ");
           currInput = checkInputs();
 
-          /* First time raising lift. (Actuators are in) */
+          if(currInput != correctInput) {
+            Serial.println("Actuators are in the wrong position. Error!");
+            Serial1.write(ERROR_SIGNAL);
+            errState = WRONG_INPUT;
+            error();
+          }
+          actsIn = ~actsIn;
+
+          /*
           if(actsIn) {
             if(currInput != 0x01) {
               Serial.println("Actuators not in! Error!");
@@ -258,10 +266,9 @@ void loop() {
               actsIn = false;
             }
           }
-          /* 2nd time raising list. (Acutators are out) */
           else {
             if(currInput != 0x02) {
-              Serial.println("Actuators not all the way out! Error");
+              Serial.printwhln("Actuators not all the way out! Error");
               Serial1.write(ERROR_SIGNAL);
               errState = ACTUATORS_ENGAGED;
               error();
@@ -270,42 +277,50 @@ void loop() {
               actsIn = true;
             }
           }
+          */
           
           Serial.println("raise lift");
-          /* Check to ensure the lift is down to begin with */
-          if(digitalRead(LIFT_UP_PIN) == LOW) {
-            Serial.println("LIFT Already up?! Error mode!");
-            Serial1.write(ERROR_SIGNAL);
-            errState = LIFT_UP;
-            error();
-          }
           /* Sending acknowledge to ramp */
           Serial1.write(0x03); 
           Serial.println("sent ok");
-          while(digitalRead(LIFT_UP_PIN) == HIGH) {
-            checkSerial();
+          currState = WAIT_FOR_LIFT_UP;
+        }
+        break;
+
+        case WAIT_FOR_LIFT_UP: {
+          currInput = checkInputs();
+          checkSerial();
+
+          /* If lift is up and still correct input*/
+          if(currInput == (0x100 || correctInput)) {
+            int message = sendMessage(0x05);
+            if(message == ACK) {
+              Serial.println("Lift up.");
+              currState = WAIT;
+            }
+            else if(message == 0x08) {
+              Serial.println("Missed ACK, but ramp received message. Put acts in. ");
+              currState = WAIT;
+            }
+            else if(message == 0x06) {
+              Serial.println("Missed ACK, but ramp received message. Take acts out. ");
+              currState = WAIT;
+            }
+            else {
+              Serial1.write(ERROR_SIGNAL);
+              errState = MISSED_SIGNAL;
+              error();
+            }
           }
-          int message = sendMessage(0x05);
-          if(message == ACK) {
-            Serial.println("lift up");
-            currState = WAIT;
-          }
-          else if(message == 0x08) {
-            Serial.println("Missed ACK, but ramp received message. Put acts in. ");
-            currState = WAIT;
-          }
-          else if(message == 0x06) {
-            Serial.println("Missed ACK, but ramp received message. Take acts out. ");
-            currState = WAIT;
-          }
-          else {
+
+          else if(currInput != correctInput) {
             Serial1.write(ERROR_SIGNAL);
-            errState = MISSED_SIGNAL;
+            errState = WRONG_INPUT;
             error();
           }
         }
         break;
-      
+        
         case WAIT: {
           Serial.println("VAN_WAIT: ");
           currInput = checkInputs();
@@ -321,19 +336,57 @@ void loop() {
         case ACTUATORS_OUT: {
             Serial.println("VAN_ACTUATORS_OUT: ");
             Serial.println("out");
-            actuatorsOut();
-            currState = WAIT;
+            Serial1.write(ACK);
+            disengageActuators();
+            currState = WAIT_FOR_ACTS_OUT;
         }
         break;
-      
+
+        case WAIT_FOR_ACTS_OUT: {
+          checkSerial();
+          currInput = checkInputs();
+          /* actuators are out */
+          if(currInput == 0x02) {
+            digitalWrite(movActuatorsDisengage, LOW); 
+            if(sendMessage(0x06) != ACK) {
+              Serial1.write(ERROR_SIGNAL);
+              errState = MISSED_SIGNAL;
+              error();
+            }
+            else {
+              currState = WAIT;
+            }
+          }
+        }
+        break;
+        
         case ACTUATORS_IN: {
             Serial.println("VAN_ACTUATORS_IN: ");
             Serial.println("in");
-            actuatorsIn();
-            currState = WAIT;
+            Serial1.write(ACK); 
+            engageActuators();
+            currState = WAIT_FOR_ACTS_IN;
         }
         break;
-      
+
+        case WAIT_FOR_ACTS_IN: {
+          checkSerial();
+          currInput = checkInputs();
+          /* actuators are in */
+          if(currInput == 0x01) {
+            digitalWrite(movActuatorsEngage, LOW);
+            if(sendMessage(0x08) != ACK) {
+              Serial1.write(ERROR_SIGNAL);
+              errState = MISSED_SIGNAL;
+              error();
+            }
+            else {
+              currState = WAIT;
+            }
+          }
+        }
+        break;
+        
         case COMPLETE: {
           Serial.println("VAN_COMPLETE: ");
           Serial1.write(ACK);
@@ -381,6 +434,7 @@ void manControl() {
   }
 }
 
+/* May need to get rid of while loop? Or not since in the ISR?? */
 void checkIgnition() {
   int count = 0;
   bool ignitionOn = false;
@@ -411,40 +465,6 @@ void engageActuators() {
 void disengageActuators() {
   digitalWrite(movActuatorsEngage, LOW);
   digitalWrite(movActuatorsDisengage, HIGH);
-}
-
-void actuatorsOut() {
-  Serial1.write(ACK);
-  digitalWrite(movActuatorsEngage, LOW);
-  digitalWrite(movActuatorsDisengage, HIGH);
-  /* Do I need to add threshold here? */
-  while(!((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
-  && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))) {
-    checkSerial();
-  }
-  digitalWrite(movActuatorsDisengage, LOW); 
-  if(sendMessage(0x06) != ACK) {
-    Serial1.write(ERROR_SIGNAL);
-    errState = MISSED_SIGNAL;
-    error();
-  }
-}
-
-void actuatorsIn() { 
-  Serial1.write(ACK); 
-  digitalWrite(movActuatorsDisengage, LOW);
-  digitalWrite(movActuatorsEngage, HIGH);
-  /* Do I need to add range to this? */
-  while(!((analogRead(frontActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD)
-  && (analogRead(rearActuatorLocationPin) < ACTUATORS_DISENGAGED_THRESHHOLD))) {
-    checkSerial();
-  }
-  digitalWrite(movActuatorsEngage, LOW); 
-  if(sendMessage(0x08) != ACK) {
-    Serial1.write(ERROR_SIGNAL);
-    errState = MISSED_SIGNAL;
-    error();
-  }
 }
 
 void error() {
@@ -583,6 +603,7 @@ void blinkError() {
   digitalWrite(ERROR_PIN, LOW);
 }
 
+/* May need to get rid of the while loop! */
 uint8_t sendMessage(uint8_t message) {
   int missCount = 0;
 
@@ -609,6 +630,7 @@ uint8_t sendMessage(uint8_t message) {
   return packate; 
 }
 
+/* May need to get rid of the while loop... */
 void checkSerial() {
   uint8_t temp = 0x00;
     while(Serial1.available() > 0) {
