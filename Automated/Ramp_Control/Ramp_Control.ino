@@ -158,7 +158,7 @@ void setup() {
     digitalWrite(ERROR_PIN, LOW);
     digitalWrite(moveCartFwd, LOW);
     digitalWrite(moveCartBack, LOW);
-    digitalWrite(motorOn, HIGH);
+    digitalWrite(motorOn, LOW);
     digitalWrite(moveLiftUp, LOW);
     digitalWrite(moveLiftDown, LOW);
     digitalWrite(READY_PIN, LOW);
@@ -749,6 +749,9 @@ void manControl() {
 }
 
 void movFwd() {
+  digitalWrite(motorOn, HIGH);
+  delay(2000);
+  
   int count = 0;
   while(digitalRead(cartAtFront) == HIGH && count < 5) {
     if(digitalRead(cartAtBack) == LOW) {
@@ -761,6 +764,7 @@ void movFwd() {
     errState = CARTS_NOT_MOVING;
     error();
   }
+  digitalWrite(motorOn, LOW);
 }
 
 void stopCarts() {
@@ -769,6 +773,8 @@ void stopCarts() {
 }
 
 void movRev() {
+    digitalWrite(motorOn, HIGH);
+    delay(2000);
     int count = 0;
     while(digitalRead(cartAtBack) == HIGH && count < 5) {
       if(digitalRead(cartAtFront) == LOW) {
@@ -781,6 +787,7 @@ void movRev() {
       errState = CARTS_NOT_MOVING;
       error();
     }
+    digitalWrite(motorOn, LOW);
 }
 
 void moveCart() {
@@ -789,7 +796,6 @@ void moveCart() {
   digitalWrite(moveCartFwd, LOW);
   delay(2000);
 }
-
 void raiseLift() {
   Serial.println("raise lift");
     int message = sendMessage(0x04);
@@ -842,6 +848,7 @@ void lowerLift() {
     }
     digitalWrite(moveLiftDown, LOW);
 }
+
 
 void movUp() {
   digitalWrite(moveLiftDown, LOW);
@@ -1145,6 +1152,10 @@ void checkSerial() {
             Serial1.write(0x03);
             autoState = START_EXCHANGE;
         }
+        /*
+        else {
+            Serial1.write(0x02);
+        }*/
       }
       if(temp == 0x06) {
         if(autoState == LOWER_LIFT) {
