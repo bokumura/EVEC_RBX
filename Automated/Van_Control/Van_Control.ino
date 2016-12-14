@@ -13,7 +13,7 @@ OTHER INPUTS:
   ignitionSwitchPin
 */ 
 
-/*
+/*lift
 OUTPUTS:
   1. movEngageActuators (actuatorsIn)
   2. movDisengageActuators (actuatorsOut)
@@ -29,14 +29,15 @@ const int ERROR_SIGNAL = 0xFF;
 const int ACK = 0x02;
 
 /* Constants */
-const int MAN_ACTS_IN = 0x01;     //Signal for when manual Actuators Engaged
-const int MAN_ACTS_OUT = 0x02;    //Signal for when manual Actuators Disengaged
-const int ACTS_IN = 0x04;         //Signal for when ActsIn (engaged)
-const int ACTS_OUT = 0x08;        //Signal for when ActsOut (disengaged)
-const int LIFT_AT_TOP = 0x10;     //Signal for when liftAtTop
-const int LIFT_AT_BOTTOM = 0xEF;  //Mask to remove LIFT_AT_TOP from correctInput.  
+const int MAN_ACTS_IN = 0x01;     // Signal for when manual Actuators Engaged
+const int MAN_ACTS_OUT = 0x02;    // Signal for when manual Actuators Disengaged
+const int ACTS_IN = 0x04;         // Signal for when ActsIn (engaged)
+const int ACTS_OUT = 0x08;        // Signal for when ActsOut (disengaged)
+const int LIFT_AT_TOP = 0x10;     // Signal for when liftAtTop
+const int LIFT_NOT_UP = 0xEF;     // Mask to remove LIFT_AT_TOP from correctInput.  
 
 const int LOST_SIGNAL = 1000;     //If signal not received within this time limit, signal was lost.
+const int DEBOUNCE_TIME = 10;     //Amount of time input needs to remain steady for debounce input
 
 volatile unsigned long last_micros;
 
@@ -121,28 +122,28 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(driverStartButton), StartISR, FALLING);
 }
 
-/* This function takes all inputs and ORs them onto the proper
+/*This function takes all inputs and ORs them onto the proper
     position on the state to be returned (currInput). Digital inputs
     are active low, so they are inverted. Analog inputs are compared
     to their threshholds and set accordingly. 
-    * Bit 0 = UNUSED (0) [Don't want to include manual inputs here...]
-    * Bit 1 = UNUSED (1) [Don't want to include manual inputs here...]
+    * Bit 0 = UNUSED (0) [Don't want to include manual inputs here.]
+    * Bit 1 = UNUSED (1) [Don't want to include manual inputs here.]
     * Bit 2 = actuatorsEngaged (In)
     * Bit 3 = actuatorsDisengaged (Out)
     * Bit 4 = liftUp 
 */
 uint8_t checkInputs() {
   uint8_t tempState = 0x00;
-    tempState |= ((analogRead(frontActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))
+  tempState |= ((analogRead(frontActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))
                  && (analogRead(rearActuatorLocationPin) < (ACTUATORS_DISENGAGED_THRESHHOLD + ACTUATOR_RANGE))) 
                  << ACTUATORS_ENGAGED_OFFSET;
   
-    tempState |= ((analogRead(frontActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE)) 
+  tempState |= ((analogRead(frontActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE)) 
                  && (analogRead(rearActuatorLocationPin) > (ACTUATORS_ENGAGED_THRESHHOLD - ACTUATOR_RANGE))) 
                  << ACTUATORS_DISENGAGED_OFFSET;
     
-    tempState |= ((!digitalRead(liftUp)) << LIFT_OFFSET);
-    return tempState;
+  tempState |= ((!debouncePin(liftUp)) << LIFT_OFFSET);
+  return tempState;
 }
 
 /* This function is similar to checkInputs, but also includes the manual
@@ -164,7 +165,23 @@ uint8_t manInputs() {
   tempState |= ((analogRead(frontActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD) 
                && (analogRead(rearActuatorLocationPin) > ACTUATORS_ENGAGED_THRESHHOLD))
                << ACTUATORS_DISENGAGED_OFFSET;
+  
+  //tempState != ((!debouncePin(liftUp)) << LIFT_OFFSET);
   return tempState;
+}
+
+
+/* This function will debounce the input and ensure that the input
+ * remains in a stable state for certain period of time.
+`*/
+int debouncePin(int pin) {
+  int temp = digitalRead(pin);
+  delay(DEBOUNCE_TIME);
+  int temp2 = digitalRead(pin);
+  if (temp2 == temp && temp == LOW)
+    return LOW;
+  else
+    return HIGH;
 }
 
 enum ErrorState {NONE, LIFT_UP, LIFT_DOWN, ACTUATORS_DISENGAGED, ACTUATORS_ENGAGED, WRONG_INPUT, RAMP_ERROR, MISSED_SIGNAL};
@@ -176,8 +193,8 @@ State prevState = INIT;
 
 void loop() {
   while(currState != STOP) {
+    printStateChange();
       switch(currState) {
-        
         case INIT: {
           Serial.println("VAN_INIT: ");
           Serial.print("currInput: ");
@@ -207,6 +224,7 @@ void loop() {
 
         case VAN_READY: {
           Serial.println("VAN_READY: ");
+          checkSerial();
           checkIgnition();
           /* ignition was on. Jump back to switch statement b4 executing code here.*/
           if(currState != VAN_READY)
@@ -214,7 +232,7 @@ void loop() {
          
           checkCorrect();
           int message = sendMessage(0x01);
-          if(message == ACK || message == 0x04) {
+          if(message == ACK) {
             Serial.println("Started Exchange. Go and wait for lift signal");
             digitalWrite(COMPLETE_PIN, LOW);
             digitalWrite(READY_PIN, LOW);
@@ -233,20 +251,22 @@ void loop() {
 
         case WAIT_FOR_LIFT: {
           currInput = checkInputs();
+          checkSerial();
           
           if(currInput != correctInput) {
-            /* Check if lift has started to go down... */
-            if(currInput == (correctInput & LIFT_AT_BOTTOM)) {
+            /* Check if lift has started to go down. */
+            if(currInput == (correctInput & LIFT_NOT_UP)) {
               Serial.println("Just started putting lift down.");
               correctInput = currInput;
             }
             else {
-              Serial1.write(ERROR_SIGNAL);
+              checkCorrect(); // Call this so can give correct errState. 
+              /*Serial1.write(ERROR_SIGNAL);
               errState = WRONG_INPUT;
               error();
+              */
             }
           }
-          checkSerial();
         }
         break;
 
@@ -262,14 +282,6 @@ void loop() {
               correctInput = (correctInput | LIFT_AT_TOP);
               currState = WAIT_FOR_ACTS;
             }
-            else if(message == 0x08) {
-              Serial.println("Missed ACK, but ramp received message. Put acts in. ");
-              currState = WAIT_FOR_ACTS;
-            }
-            else if(message == 0x06) {
-              Serial.println("Missed ACK, but ramp received message. Take acts out. ");
-              currState = WAIT_FOR_ACTS;
-            }
             else {
               Serial1.write(ERROR_SIGNAL);
               errState = MISSED_SIGNAL;
@@ -278,9 +290,11 @@ void loop() {
           }
 
           else if(currInput != correctInput) {
-            Serial1.write(ERROR_SIGNAL);
+            checkCorrect();     // Call this so can give correct errState. 
+            /*Serial1.write(ERROR_SIGNAL);
             errState = WRONG_INPUT;
             error();
+            */
           }
         }
         break;
@@ -292,6 +306,7 @@ void loop() {
         }
         break;
 
+        /* Can the inputs here be anything but acts in or acts out? */
         case WAIT_FOR_ACTS_OUT: {
           checkSerial();
           currInput = checkInputs();
@@ -311,12 +326,13 @@ void loop() {
           else if(digitalRead(liftUp) == HIGH) {
             Serial.println("Lift not up! ERROR!");
             Serial1.write(ERROR_SIGNAL);
-            errState = LIFT_UP;
+            errState = LIFT_DOWN;
             error();
           }
         }
         break;
-        
+
+        /* Can the inputs here be anything but acts in or acts out? */
         case WAIT_FOR_ACTS_IN: {
           checkSerial();
           currInput = checkInputs();
@@ -335,7 +351,7 @@ void loop() {
           else if(digitalRead(liftUp) == HIGH) {
             Serial.println("Lift not up! ERROR!");
             Serial1.write(ERROR_SIGNAL);
-            errState = LIFT_UP;
+            errState = LIFT_DOWN;
             error();
           }
         }
@@ -344,14 +360,16 @@ void loop() {
         case WAIT_FOR_DONE: {
           if(currInput != correctInput) {
             /* Check if lift has started to go down... */
-            if(currInput == (correctInput & LIFT_AT_BOTTOM)) {
+            if(currInput == (correctInput & LIFT_NOT_UP)) {
               Serial.println("Just started putting lift down.");
               correctInput = currInput;
             }
             else {
-              Serial1.write(ERROR_SIGNAL);
+              checkCorrect();     // Call this so that can give correct errState.
+              /*Serial1.write(ERROR_SIGNAL);
               errState = WRONG_INPUT;
               error();
+              */
             }
           }
           checkSerial();
@@ -378,7 +396,7 @@ void checkCorrect() {
       errState = LIFT_DOWN;
     }
     /* Correct input has LIFT_DOWN and currInput does not... */
-    else if(((correctInput | LIFT_AT_BOTTOM) == LIFT_AT_BOTTOM) && ((currInput | LIFT_AT_BOTTOM) != LIFT_AT_BOTTOM)) {
+    else if(((correctInput | LIFT_NOT_UP) == LIFT_NOT_UP) && ((currInput | LIFT_NOT_UP) != LIFT_NOT_UP)) {
       errState = LIFT_UP;
     }
     else {
@@ -417,6 +435,17 @@ void manControl() {
       break;
     }
   }
+}
+
+/* Print out if the state has changed. */
+void printStateChange() {
+   if(prevState != currState) {
+      Serial.print("Changing state. Previous State = ");
+      Serial.println(prevState);
+       Serial.print("New State = ");
+      Serial.println(currState);
+    }
+    prevState = currState;
 }
 
 /* May need to get rid of while loop? Or not since in the ISR?? */
@@ -619,8 +648,7 @@ void checkSerial() {
         errState = RAMP_ERROR;
         error();
       }
-
-      /* Need to make this more specific on what states are allowed...*/
+      
       if(temp == 0x01) {
         if(currState == WAIT_FOR_VAN) {
           rampReady = true;
@@ -642,8 +670,9 @@ void checkSerial() {
         }
         Serial.println("state to raise");
       }
+      
       if(temp == 0x05) {
-        if(currState == WAIT_FOR_DRIVER || currState == WAIT_FOR_LIFT) { 
+        if(currState == WAIT_FOR_DRIVER) { 
           Serial1.write(ACK);
           currState = WAIT_FOR_VAN;
           digitalWrite(READY_PIN, LOW);
@@ -654,6 +683,7 @@ void checkSerial() {
           Serial1.write(ACK); // Ramp may have missed ACK from driving off ramp.
         }
       }
+      
       if(temp == 0x06) {
         if(currState == WAIT_FOR_ACTS_OUT)
           Serial1.write(ACK);
@@ -665,17 +695,18 @@ void checkSerial() {
           disengageActuators();
         }
       }
+      
       if(temp == 0x08) {
         if(currState == WAIT_FOR_ACTS_IN)
           Serial1.write(ACK);
         else if(currState == WAIT_FOR_ACTS) {
           currState = WAIT_FOR_ACTS_IN; 
-          /* Should check inputs for validity... */
           Serial1.write(ACK);
           correctInput = ACTS_IN | LIFT_AT_TOP;
           engageActuators();
         }
       }
+      
       if(temp == 0x09) {
         if(currState == WAIT_FOR_DONE)
           Serial1.write(ACK);
@@ -684,6 +715,7 @@ void checkSerial() {
           currState = INIT;
           Serial1.flush();
       }
+      
     }
     Serial.print("currState:");
     Serial.println(currState);
