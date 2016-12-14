@@ -1,4 +1,5 @@
 /*
+
 INPUTS:
   Bit 0 = manActuatorsEngage
   Bit 1 = manActuatorsDisengage
@@ -747,4 +748,3 @@ void StartISR() {
     Serial.println("button not pressed down long enough.");
   }
 }
-
